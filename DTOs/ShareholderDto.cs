@@ -5,7 +5,6 @@ public class ShareholderDto
     public int ShId { get; set; }
     public string ShType { get; set; } = null!;
     public string UserName { get; set; } = null!;
-    public string? Password { get; set; }
     public string FullName { get; set; } = null!;
     public string? Cnic { get; set; }
     public string? NtnNo { get; set; }
