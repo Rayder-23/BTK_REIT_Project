@@ -1,0 +1,44 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# dotnet user secrets
+**/secrets.json
+
+# Published output
+publish/
+out/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / local config overrides
+appsettings.Development.json
+appsettings.Local.json
+*.env
+
+# Local setup scripts (contain credentials)
+setup-secrets.ps1
