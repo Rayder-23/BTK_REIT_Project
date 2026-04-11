@@ -1,0 +1,501 @@
+### ============================================================
+### BTK REIT Management Engine — Full Life Cycle Test Suite
+### Version : 1.1.0
+### Author  : Rayder-23/BTK
+###
+### HOW TO USE:
+###   1. Ensure the API is running:  dotnet run
+###      HTTP  → http://localhost:5039
+###   2. Execute each request IN ORDER using the VS Code REST Client
+###      extension. Dynamic variables (@name / .response.body) wire
+###      IDs automatically — no manual edits needed between steps.
+###   3. After the run, execute Scripts/teardown_test_run.sql to
+###      remove only the rows created by this suite.
+###
+### PRE-CONDITIONS (seed data must exist before running):
+###   AdminUsers    — user_id=1, status=active
+###   Configurations — keys present:
+###                    sh_type       → includes 'individual'
+###                    status_sh     → includes 'inactive'
+###                    transfer_type → includes 'gift'
+###                    expense_type  → includes 'management'
+###
+### IMPORTANT: This suite creates a NEW property each run.
+###   The REIT entity (sh_id=1, is_reit=true) must exist in
+###   Shareholders as it is the initial 100% owner of every fund.
+### ============================================================
+
+@baseUrl = http://localhost:5039
+@adminId = 1
+@reitShId = 1
+
+### ============================================================
+### PRE-FLIGHT CHECKS
+### Run these first to verify seed data is present.
+### Both should return 200 OK with non-empty arrays.
+### ============================================================
+
+### PRE-FLIGHT 1 — Confirm admin user exists
+# @name preflightAdmin
+GET {{baseUrl}}/api/shareholders/{{reitShId}}
+
+###
+### ✔ Expected: 200 OK — REIT entity shareholder (isReit=true) found.
+### ✖ If 404: seed the REIT entity before running the suite.
+###
+
+### PRE-FLIGHT 2 — Confirm 'sh_type' config key exists
+# @name preflightConfig
+GET {{baseUrl}}/api/config
+
+###
+### ✔ Expected: 200 OK — array includes entries for sh_type,
+###   status_sh, transfer_type, expense_type, status_prop, prop_type.
+### ✖ If any key is missing: seed Configurations before running.
+###
+
+
+### ============================================================
+### STEP 1 — Register a new Test Shareholder
+###
+### ✔ Expected: 201 Created
+### Captured: shId  →  used in Steps 2, 4a, 8 (failure), portfolio
+### ============================================================
+
+# @name registerShareholder
+POST {{baseUrl}}/api/shareholders
+Content-Type: application/json
+
+{
+  "userId":       {{adminId}},
+  "userName":     "test.ahmed.raza",
+  "fullName":     "TEST-RUN Ahmed Raza",
+  "contactNo":    "+92-300-1234567",
+  "contactEmail": "test.ahmed.raza@btkreit.test",
+  "shType":       "individual",
+  "cnic":         "35202-9988776-1",
+  "isOverseas":   false,
+  "isFiller":     false,
+  "isReit":       false
+}
+
+###
+### ✔ Expected: 201 Created
+###   { "shId": N, "userName": "test.ahmed.raza", "fullName": "TEST-RUN Ahmed Raza" }
+###
+### @capture  shId = registerShareholder.response.body.shId
+###
+
+
+### ============================================================
+### STEP 2 — Add a Bank Account to the new Shareholder
+###
+### Route: POST /api/shareholders/account  (shId goes in the body)
+### ✔ Expected: 201 Created
+### Captured: shAccountId  →  referenced in teardown
+### ============================================================
+
+# @name addBankAccount
+POST {{baseUrl}}/api/shareholders/account
+Content-Type: application/json
+
+{
+  "shId":         {{registerShareholder.response.body.shId}},
+  "bank":         "HBL",
+  "accountTitle": "TEST-RUN Ahmed Raza",
+  "acNo":         "PK36HABB0000009988776602",
+  "userId":       {{adminId}},
+  "notes":        "TEST-RUN bank account"
+}
+
+###
+### ✔ Expected: 201 Created
+###   { "shAccountId": N, "shId": N, "bank": "HBL", "acNo": "...", "status": "active" }
+###
+
+
+### ============================================================
+### STEP 3 — Onboard a Property (creates Property + TrustFund + FundDetail)
+###
+### Creates a brand-new property each run — no dependency on a
+### pre-existing prop_id. REIT entity takes 100% ownership at inception.
+### ✔ Expected: 201 Created
+### Captured: propId, fundId, fundDtId (seed ownership row)
+### ============================================================
+
+# @name onboardProperty
+POST {{baseUrl}}/api/properties/onboard
+Content-Type: application/json
+
+{
+  "userId":        {{adminId}},
+  "propType":      "commercial",
+  "propName":      "TEST-RUN BTK Commerce Tower",
+  "address":       "Plot 14, Blue Area, Constitution Avenue",
+  "city":          "Islamabad",
+  "provinceState": "ICT",
+  "country":       "Pakistan",
+  "purchasePrice": 50000000.00,
+  "currentValue":  55000000.00,
+  "status":        "active",
+  "fundTitle":     "TEST-RUN BTK Commerce Fund",
+  "fundTotalValue": 50000000.00,
+  "propNotes":     "TEST-RUN property — safe to delete after test",
+  "fundNotes":     "TEST-RUN fund — safe to delete after test"
+}
+
+###
+### ✔ Expected: 201 Created
+###   { "propId": N, "propName": "TEST-RUN BTK Commerce Tower",
+###     "fundId": N, "fundTotalValue": 50000000, "fundDtId": N }
+###
+
+
+### ============================================================
+### STEP 4a — Initiate a 10% Share Transfer (gift: REIT → Ahmed Raza)
+###
+### Using transfer_type='gift' avoids the payment body requirement,
+### keeping the lifecycle test self-contained.
+### Route returns 200 OK (not 201).
+### ✔ Expected: 200 OK
+### Captured: transferId  →  used in Step 4b
+### ============================================================
+
+# @name initiateTransfer
+POST {{baseUrl}}/api/transfers/initiate
+Content-Type: application/json
+
+{
+  "userId":       {{adminId}},
+  "fundId":       {{onboardProperty.response.body.fundId}},
+  "fromShId":     {{reitShId}},
+  "toShId":       {{registerShareholder.response.body.shId}},
+  "transferType": "gift",
+  "pctTransfer":  10.00,
+  "notes":        "TEST-RUN: Initial 10% gift from REIT to Ahmed Raza"
+}
+
+###
+### ✔ Expected: 200 OK
+###   { "transferId": N, "status": "pending", "message": "Transfer initiated..." }
+###
+
+
+### ============================================================
+### STEP 4b — Complete the Transfer
+###
+### userId is a QUERY PARAM — no request body required for gift transfers.
+### ✔ Expected: 200 OK  |  verifiedTotalPct = 100.00
+### ============================================================
+
+# @name completeTransfer
+POST {{baseUrl}}/api/transfers/complete/{{initiateTransfer.response.body.transferId}}?userId={{adminId}}
+
+###
+### ✔ Expected: 200 OK
+###   { "transferId": N, "buyerFundDtId": N, "sellerFundDtId": N,
+###     "verifiedTotalPct": 100.00, "message": "Transfer completed..." }
+###
+
+
+### ============================================================
+### STEP 5a — Record Rental Income  (April 2026)
+###
+### ✔ Expected: 201 Created  |  status = "overdue" (initial state)
+### Captured: rentId  →  used in Step 5b, 6a
+### ============================================================
+
+# @name recordRental
+POST {{baseUrl}}/api/rental/record
+Content-Type: application/json
+
+{
+  "userId":    {{adminId}},
+  "fundId":    {{onboardProperty.response.body.fundId}},
+  "rentMonth": 4,
+  "rentYear":  2026,
+  "dueDate":   "2026-04-30",
+  "amountDue": 250000.00,
+  "notes":     "TEST-RUN: April 2026 rental income"
+}
+
+###
+### ✔ Expected: 201 Created
+###   { "rentId": N, "fundId": N, "rentMonth": 4, "rentYear": 2026,
+###     "amountDue": 250000, "amountPaid": 0, "lateFee": 0, "status": "overdue" }
+###
+
+
+### ============================================================
+### STEP 5b — Receive Rental Payment (full settlement)
+###
+### Route: PATCH /api/rental/receive-payment/{rentId}
+### ✔ Expected: 200 OK  |  status = "paid"
+### ============================================================
+
+# @name receiveRental
+PATCH {{baseUrl}}/api/rental/receive-payment/{{recordRental.response.body.rentId}}
+Content-Type: application/json
+
+{
+  "userId":      {{adminId}},
+  "amountPaid":  250000.00,
+  "lateFee":     0.00,
+  "paymentDate": "2026-04-28",
+  "notes":       "TEST-RUN: Full April 2026 rent received"
+}
+
+###
+### ✔ Expected: 200 OK
+###   { "rentId": N, "amountDue": 250000, "amountPaid": 250000,
+###     "lateFee": 0, "status": "paid" }
+###
+
+
+### ============================================================
+### STEP 6a — Calculate Dividends  (10% tax rate)
+###
+### Ahmed Raza owns 10% → gross = 25,000 / tax = 2,500 / net = 22,500
+### ✔ Expected: 200 OK  |  dividendsCreated = 1
+### Captured: dividendIds[0]  →  used in Step 6b
+### ============================================================
+
+# @name calculateDividends
+POST {{baseUrl}}/api/dividend/calculate
+Content-Type: application/json
+
+{
+  "userId":    {{adminId}},
+  "fundId":    {{onboardProperty.response.body.fundId}},
+  "rentMonth": 4,
+  "rentYear":  2026,
+  "taxRate":   0.10,
+  "notes":     "TEST-RUN: April 2026 dividend calculation"
+}
+
+###
+### ✔ Expected: 200 OK
+###   { "dividendsCreated": 1, "dividendIds": [N], "taxRate": 0.10, ... }
+###
+
+
+### ============================================================
+### STEP 6b — Confirm Dividend Payout
+###
+### ✔ Expected: 200 OK  |  status = "paid", paymentMethod = "bank-transfer"
+### ============================================================
+
+# @name confirmDividend
+POST {{baseUrl}}/api/dividend/confirm-payout/{{calculateDividends.response.body.dividendIds[0]}}
+Content-Type: application/json
+
+{
+  "userId": {{adminId}},
+  "notes":  "TEST-RUN: Bank transfer confirmed — April 2026"
+}
+
+###
+### ✔ Expected: 200 OK
+###   { "divId": N, "status": "paid", "paymentMethod": "bank-transfer",
+###     "paidOn": "2026-...", "netAmountPaid": 22500 }
+###
+
+
+### ============================================================
+### STEP 7a — Record a Management Expense
+###
+### ✔ Expected: 201 Created  |  status = "pending"
+### Captured: expenseId  →  used in Step 7b and failure test
+### ============================================================
+
+# @name recordExpense
+POST {{baseUrl}}/api/expense/record
+Content-Type: application/json
+
+{
+  "userId":      {{adminId}},
+  "fundId":      {{onboardProperty.response.body.fundId}},
+  "month":       4,
+  "year":        2026,
+  "expenseType": "mgmt-fee",
+  "description": "TEST-RUN: Monthly management fee - April 2026",
+  "amount":      12500.00,
+  "notes":       "TEST-RUN: Standard 5% management fee"
+}
+
+###
+### ✔ Expected: 201 Created
+###   { "expenseId": N, "fundId": N, "expenseType": "management",
+###     "amount": 12500, "status": "pending" }
+###
+
+
+### ============================================================
+### STEP 7b — Settle the Expense
+###
+### ✔ Expected: 200 OK  |  status = "paid"
+### ============================================================
+
+# @name settleExpense
+PATCH {{baseUrl}}/api/expense/settle/{{recordExpense.response.body.expenseId}}
+Content-Type: application/json
+
+{
+  "userId": {{adminId}},
+  "notes":  "TEST-RUN: Management fee paid via bank transfer"
+}
+
+###
+### ✔ Expected: 200 OK
+###   { "expenseId": N, "status": "paid", ... }
+###
+
+
+### ============================================================
+### STEP 8 — Verify Audit Log
+###
+### Filter by the fund created in this run to isolate test entries.
+### ✔ Expected: 200 OK  |  ≥ 10 entries for this test run
+### ============================================================
+
+# @name auditLogFull
+GET {{baseUrl}}/api/log/recent?limit=50
+
+###
+### ✔ Expected: Most-recent 50 log entries — test actions appear at top.
+###
+
+### STEP 8b — Audit scoped to ShareholderID from Step 1
+# @name auditByShareholder
+GET {{baseUrl}}/api/log/recent?userId={{adminId}}&limit=20
+
+###
+### ✔ Expected: 200 OK — entries authored by adminId=1 from this run.
+###
+
+### STEP 8c — Fund Summary health check
+# @name fundSummary
+GET {{baseUrl}}/api/Fund/{{onboardProperty.response.body.fundId}}/summary
+
+###
+### ✔ Expected: 200 OK
+###   latestRental.status = "paid"
+###   expenses.totalPaid  > 0
+###   activeOwners.length = 2 (REIT @ 90%, Ahmed Raza @ 10%)
+###
+
+
+### ============================================================
+### FAILURE / VALIDATION TESTS
+###
+### These MUST return 4xx to confirm guardrails are active.
+### Run these after the lifecycle steps so all IDs are populated.
+### ============================================================
+
+### ── FAILURE 1: Invalid shareholder status ──────────────────────
+### Expects: 400 Bad Request
+### Proves:  ValidationService rejects values outside 'status_sh' list
+### ──────────────────────────────────────────────────────────────
+
+# @name failInvalidShareholderStatus
+PATCH {{baseUrl}}/api/shareholders/{{registerShareholder.response.body.shId}}/status
+Content-Type: application/json
+
+{
+  "status": "abandoned",
+  "userId": {{adminId}}
+}
+
+###
+### ✔ Expected: 400 Bad Request
+###   { "error": "Invalid value", "field": "status", "allowed": [...] }
+###
+
+### ── FAILURE 2: Invalid expense type ────────────────────────────
+### Expects: 400 Bad Request
+### Proves:  ValidationService rejects values outside 'expense_type' list
+### ──────────────────────────────────────────────────────────────
+
+# @name failInvalidExpenseType
+POST {{baseUrl}}/api/expense/record
+Content-Type: application/json
+
+{
+  "userId":      {{adminId}},
+  "fundId":      {{onboardProperty.response.body.fundId}},
+  "month":       4,
+  "year":        2026,
+  "expenseType": "bribery",
+  "description": "TEST-RUN: This should be rejected",
+  "amount":      99.99
+}
+
+###
+### ✔ Expected: 400 Bad Request
+###   { "error": "Invalid value", "field": "expense_type", "allowed": [...] }
+###
+
+### ── FAILURE 3: Duplicate dividend calculation ───────────────────
+### Expects: 409 Conflict
+### Proves:  Idempotency guard on dividend calculation
+### ──────────────────────────────────────────────────────────────
+
+# @name failDuplicateDividend
+POST {{baseUrl}}/api/dividend/calculate
+Content-Type: application/json
+
+{
+  "userId":    {{adminId}},
+  "fundId":    {{onboardProperty.response.body.fundId}},
+  "rentMonth": 4,
+  "rentYear":  2026,
+  "taxRate":   0.10
+}
+
+###
+### ✔ Expected: 409 Conflict
+###   "Dividend rows already exist for FundID N, period 4/2026."
+###
+
+### ── FAILURE 4: Settle an already-paid expense ──────────────────
+### Expects: 400 Bad Request
+### Proves:  Double-settle guard on Expenses
+### ──────────────────────────────────────────────────────────────
+
+# @name failDoubleSettle
+PATCH {{baseUrl}}/api/expense/settle/{{recordExpense.response.body.expenseId}}
+Content-Type: application/json
+
+{
+  "userId": {{adminId}}
+}
+
+###
+### ✔ Expected: 400 Bad Request
+###   "Expense expense_id=N is already marked 'paid'."
+###
+
+### ── FAILURE 5: Complete an already-completed transfer ───────────
+### Expects: 400 Bad Request
+### Proves:  Status guard on transfer completion
+### ──────────────────────────────────────────────────────────────
+
+# @name failDoubleComplete
+POST {{baseUrl}}/api/transfers/complete/{{initiateTransfer.response.body.transferId}}?userId={{adminId}}
+
+###
+### ✔ Expected: 400 Bad Request
+###   "Transfer ID N has status 'completed' and cannot be completed."
+###
+
+
+### ============================================================
+### END OF TEST SUITE
+###
+### Expected summary after a clean run:
+###   Lifecycle (Steps 1–8c): ALL 2xx
+###   Failure tests (1–5)   : ALL 4xx (400 or 409)
+###   Audit log              : ≥ 10 entries for this test run
+###
+### To clean up: run Scripts/teardown_test_run.sql
+### ============================================================
