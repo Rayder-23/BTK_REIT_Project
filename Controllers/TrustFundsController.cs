@@ -7,7 +7,8 @@ using REIT_Project.Services;
 namespace REIT_Project.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/trustfunds")]
+    [Tags("Trust Funds")]
     public class TrustFundsController : ControllerBase
     {
         private readonly ReitContext _context;

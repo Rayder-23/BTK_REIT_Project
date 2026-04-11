@@ -6,7 +6,8 @@ using REIT_Project.DTOs;
 namespace REIT_Project.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/log")]
+    [Tags("Log")]
     public class LogController : ControllerBase
     {
         private readonly ReitContext _context;

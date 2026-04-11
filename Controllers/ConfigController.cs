@@ -8,7 +8,8 @@ using REIT_Project.Services;
 namespace REIT_Project.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/config")]
+    [Tags("Config")]
     public class ConfigController : ControllerBase
     {
         private readonly ReitContext _context;

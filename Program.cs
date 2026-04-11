@@ -63,9 +63,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi(); 
 
     // This tells Scalar where to find that JSON file
-    app.MapScalarApiReference(options => 
+    app.MapScalarApiReference(options =>
     {
         options.WithOpenApiRoutePattern("/openapi/v1.json");
+        options.WithTitle("BTK REIT Management API v1.1");
     });
 }
 

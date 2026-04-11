@@ -7,7 +7,8 @@ using REIT_Project.Services;
 namespace REIT_Project.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/rental")]
+    [Tags("Rental")]
     public class RentalController : ControllerBase
     {
         private readonly ReitContext _context;

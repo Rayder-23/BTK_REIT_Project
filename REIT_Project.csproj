@@ -5,6 +5,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>44048b3a-e35f-49c7-bfda-e96e775e651b</UserSecretsId>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <Description>BTK Real Estate Investment Trust (REIT) Management Engine with Dynamic Validation and Audit Logging.</Description>
+    <Authors>Rayder-23/BTK</Authors>
+    <Company>BTK</Company>
+    <Product>BTK REIT Management Engine</Product>
   </PropertyGroup>
 
   <ItemGroup>

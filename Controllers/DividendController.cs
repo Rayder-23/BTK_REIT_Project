@@ -7,7 +7,8 @@ using REIT_Project.Services;
 namespace REIT_Project.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/dividend")]
+    [Tags("Dividend")]
     public class DividendController : ControllerBase
     {
         private const int ReitShareholderId = 1;
