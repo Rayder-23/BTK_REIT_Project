@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using REIT_Project.Models;
 using REIT_Project.Services;
 using Scalar.AspNetCore;
@@ -15,6 +16,8 @@ builder.Services.AddDbContext<ReitContext>(options =>
 // builder.Services.AddControllers();  // no webpage fix
 
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IValidationService, ValidationService>();
+builder.Services.AddMemoryCache();
 
 // FIX 1: Tell the API how to handle loops in JSON responses
 builder.Services.AddControllers()

@@ -10,16 +10,15 @@ namespace REIT_Project.Controllers
     [Route("api/[controller]")]
     public class ShareholderController : ControllerBase
     {
-        private static readonly HashSet<string> ValidShTypes =
-            new(StringComparer.OrdinalIgnoreCase) { "individual", "company", "trust" };
-
         private readonly ReitContext _context;
         private readonly IAuditService _audit;
+        private readonly IValidationService _validation;
 
-        public ShareholderController(ReitContext context, IAuditService audit)
+        public ShareholderController(ReitContext context, IAuditService audit, IValidationService validation)
         {
-            _context = context;
-            _audit = audit;
+            _context    = context;
+            _audit      = audit;
+            _validation = validation;
         }
 
         // POST: api/Shareholder
@@ -29,8 +28,16 @@ namespace REIT_Project.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            if (!ValidShTypes.Contains(dto.ShType))
-                return BadRequest($"Invalid sh_type '{dto.ShType}'. Must be 'individual', 'company', or 'trust'.");
+            try
+            {
+                var (isValid, allowed) = await _validation.IsValidAsync("sh_type", dto.ShType);
+                if (!isValid)
+                    return BadRequest(new { error = "Invalid value", field = "sh_type", allowed });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
 
             var strategy = _context.Database.CreateExecutionStrategy();
 

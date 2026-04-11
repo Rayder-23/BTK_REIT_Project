@@ -13,16 +13,15 @@ namespace REIT_Project.Controllers
         private const int ReitShareholderId = 1;
         private const decimal ReitMinimumPct = 10.00m;
 
-        private static readonly HashSet<string> ValidTransferTypes =
-            new(StringComparer.OrdinalIgnoreCase) { "sale", "gift", "inheritance" };
-
         private readonly ReitContext _context;
         private readonly IAuditService _audit;
+        private readonly IValidationService _validation;
 
-        public TransferController(ReitContext context, IAuditService audit)
+        public TransferController(ReitContext context, IAuditService audit, IValidationService validation)
         {
-            _context = context;
-            _audit = audit;
+            _context    = context;
+            _audit      = audit;
+            _validation = validation;
         }
 
         // ── POST /api/Transfer/initiate ──────────────────────────────────────
@@ -36,8 +35,16 @@ namespace REIT_Project.Controllers
             if (dto.FromShId == dto.ToShId)
                 return BadRequest("from_sh_id and to_sh_id must be different shareholders.");
 
-            if (!ValidTransferTypes.Contains(dto.TransferType))
-                return BadRequest($"Invalid transfer_type '{dto.TransferType}'. Must be 'sale', 'gift', or 'inheritance'.");
+            try
+            {
+                var (ttValid, ttAllowed) = await _validation.IsValidAsync("transfer_type", dto.TransferType);
+                if (!ttValid)
+                    return BadRequest(new { error = "Invalid value", field = "transfer_type", allowed = ttAllowed });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
 
             if (dto.TransferType.Equals("sale", StringComparison.OrdinalIgnoreCase) && dto.AgreedPrice is null)
                 return BadRequest("agreed_price is required when transfer_type is 'sale'.");
@@ -135,9 +142,6 @@ namespace REIT_Project.Controllers
                 }
             });
         }
-
-        private static readonly HashSet<string> ValidPaymentTypes =
-            new(StringComparer.OrdinalIgnoreCase) { "bank-transfer", "cheque", "cash" };
 
         // ── POST /api/Transfer/complete/{id} ─────────────────────────────────
         [HttpPost("complete/{id:int}")]
@@ -283,10 +287,16 @@ namespace REIT_Project.Controllers
                             return BadRequest(
                                 "paymentDetails body is required for non-gift transfers.");
 
-                        if (!ValidPaymentTypes.Contains(paymentDetails.PaymentType))
-                            return BadRequest(
-                                $"Invalid Payment Type '{paymentDetails.PaymentType}'. " +
-                                "Must be 'bank-transfer', 'cheque', or 'cash'.");
+                        try
+                        {
+                            var (ptValid, ptAllowed) = await _validation.IsValidAsync("payment_type", paymentDetails.PaymentType);
+                            if (!ptValid)
+                                return BadRequest(new { error = "Invalid value", field = "payment_type", allowed = ptAllowed });
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            return StatusCode(500, ex.Message);
+                        }
 
                         decimal grossAmount = transfer.AgreedPrice.Value;
                         decimal tax         = paymentDetails.Tax;

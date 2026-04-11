@@ -10,22 +10,18 @@ namespace REIT_Project.Controllers
     [Route("api/[controller]")]
     public class PropertyController : ControllerBase
     {
-        private static readonly HashSet<string> ValidPropTypes =
-            new(StringComparer.OrdinalIgnoreCase) { "residential", "commercial", "mixed-use" };
-
-        private static readonly HashSet<string> ValidStatuses =
-            new(StringComparer.OrdinalIgnoreCase) { "active", "sold", "under-review" };
-
         // sh_id = 1 is the REIT entity that holds 100 % ownership at inception.
         private const int ReitShareholderId = 1;
 
         private readonly ReitContext _context;
         private readonly IAuditService _audit;
+        private readonly IValidationService _validation;
 
-        public PropertyController(ReitContext context, IAuditService audit)
+        public PropertyController(ReitContext context, IAuditService audit, IValidationService validation)
         {
-            _context = context;
-            _audit = audit;
+            _context    = context;
+            _audit      = audit;
+            _validation = validation;
         }
 
         // POST: api/Property/onboard
@@ -37,12 +33,22 @@ namespace REIT_Project.Controllers
                 return BadRequest(ModelState);
 
             // ── Business rule validation (fast-fail before opening transaction) ─
-            if (!ValidPropTypes.Contains(dto.PropType))
-                return BadRequest($"Invalid prop_type '{dto.PropType}'. Must be 'residential', 'commercial', or 'mixed-use'.");
-
             string resolvedStatus = string.IsNullOrWhiteSpace(dto.Status) ? "active" : dto.Status;
-            if (!ValidStatuses.Contains(resolvedStatus))
-                return BadRequest($"Invalid status '{resolvedStatus}'. Must be 'active', 'sold', or 'under-review'.");
+
+            try
+            {
+                var (propTypeValid, propTypeAllowed) = await _validation.IsValidAsync("prop_type", dto.PropType);
+                if (!propTypeValid)
+                    return BadRequest(new { error = "Invalid value", field = "prop_type", allowed = propTypeAllowed });
+
+                var (statusValid, statusAllowed) = await _validation.IsValidAsync("status_prop", resolvedStatus);
+                if (!statusValid)
+                    return BadRequest(new { error = "Invalid value", field = "status", allowed = statusAllowed });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
 
             DateOnly resolvedDateAdded = dto.DateAdded ?? DateOnly.FromDateTime(DateTime.Today);
 

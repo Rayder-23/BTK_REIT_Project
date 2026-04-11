@@ -10,17 +10,15 @@ namespace REIT_Project.Controllers
     [Route("api/[controller]")]
     public class ExpenseController : ControllerBase
     {
-        private static readonly HashSet<string> ValidExpenseTypes =
-            new(StringComparer.OrdinalIgnoreCase)
-            { "maintenance", "utility", "tax", "insurance", "mgmt-fee", "other" };
-
         private readonly ReitContext _context;
         private readonly IAuditService _audit;
+        private readonly IValidationService _validation;
 
-        public ExpenseController(ReitContext context, IAuditService audit)
+        public ExpenseController(ReitContext context, IAuditService audit, IValidationService validation)
         {
-            _context = context;
-            _audit = audit;
+            _context    = context;
+            _audit      = audit;
+            _validation = validation;
         }
 
         // ── POST /api/Expense/record ─────────────────────────────────────────
@@ -34,10 +32,16 @@ namespace REIT_Project.Controllers
                 return BadRequest(ModelState);
 
             // ── Fast-fail business rule checks ───────────────────────────────
-            if (!ValidExpenseTypes.Contains(dto.ExpenseType))
-                return BadRequest(
-                    $"Invalid expense_type '{dto.ExpenseType}'. " +
-                    $"Must be one of: {string.Join(", ", ValidExpenseTypes)}.");
+            try
+            {
+                var (etValid, etAllowed) = await _validation.IsValidAsync("expense_type", dto.ExpenseType);
+                if (!etValid)
+                    return BadRequest(new { error = "Invalid value", field = "expense_type", allowed = etAllowed });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
 
             bool fundExists = await _context.TrustFunds.AnyAsync(f => f.FundId == dto.FundId);
             if (!fundExists)
