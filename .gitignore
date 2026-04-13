@@ -1,44 +1,46 @@
-# Build output
+# ── Build output ──────────────────────────────────────────────────────────────
 bin/
 obj/
+out/
+publish/
+artifacts/
 
-# User-specific files
+# ── Visual Studio ─────────────────────────────────────────────────────────────
+.vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
-.vs/
 
-# dotnet user secrets
-**/secrets.json
+# ── Rider ─────────────────────────────────────────────────────────────────────
+.idea/
 
-# Published output
-publish/
-out/
+# ── VS Code ───────────────────────────────────────────────────────────────────
+.vscode/
 
-# NuGet
+# ── NuGet ─────────────────────────────────────────────────────────────────────
 *.nupkg
 *.snupkg
 **/packages/
 !**/packages/build/
 project.lock.json
 project.fragment.lock.json
-artifacts/
 
-# Rider
-.idea/
+# ── .NET user secrets (connection strings, passwords) ─────────────────────────
+**/secrets.json
 
-# VS Code
-.vscode/
+# ── Local config overrides ────────────────────────────────────────────────────
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/*.env
 
-# OS
+# ── Local setup scripts (may contain credentials) ─────────────────────────────
+setup-secrets.ps1
+
+# ── Blazor / WASM publish cache ───────────────────────────────────────────────
+wwwroot/_framework/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Environment / local config overrides
-appsettings.Development.json
-appsettings.Local.json
-*.env
-
-# Local setup scripts (contain credentials)
-setup-secrets.ps1
+desktop.ini

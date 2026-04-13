@@ -1,0 +1,89 @@
+@page "/shareholders"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+@using BTK_REIT_Shared.DTOs
+
+<PageTitle>Shareholders — BTK REIT</PageTitle>
+
+<h1>Shareholders</h1>
+
+@if (errorMessage is not null)
+{
+    <div class="reit-error">
+        <strong>Could not load data.</strong> @errorMessage
+    </div>
+}
+
+@if (shareholders is null && errorMessage is null)
+{
+    <p class="reit-loading">Loading shareholders...</p>
+}
+else if (shareholders is not null)
+{
+    <table class="reit-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Type</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>CNIC</th>
+                <th>Status</th>
+                <th>Since</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var sh in shareholders)
+            {
+                <tr>
+                    <td>@sh.ShId</td>
+                    <td>@sh.FullName</td>
+                    <td>@sh.UserName</td>
+                    <td>@sh.ShType</td>
+                    <td>@sh.ContactNo</td>
+                    <td>@sh.ContactEmail</td>
+                    <td>@(sh.Cnic ?? "-")</td>
+                    <td>
+                        <span class="@GetStatusBadgeClass(sh.Status)">@sh.Status</span>
+                    </td>
+                    <td>@sh.CreationDate.ToShortDateString()</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p style="margin-top:0.75rem; font-size:0.8rem; color:#9ca3af;">
+        @shareholders.Count shareholder(s) loaded.
+    </p>
+}
+
+@code {
+    private List<ShareholderDto>? shareholders;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            shareholders = await Http.GetFromJsonAsync<List<ShareholderDto>>("api/shareholders");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"API unreachable — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private static string GetStatusBadgeClass(string status) => status.ToLower() switch
+    {
+        "active"   => "badge-active",
+        "pending"  => "badge-pending",
+        _          => "badge-inactive"
+    };
+}

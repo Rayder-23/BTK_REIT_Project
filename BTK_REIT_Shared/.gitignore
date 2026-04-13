@@ -1,0 +1,2 @@
+# Shared library — common patterns handled by root .gitignore.
+# No project-specific exclusions needed for a pure class library.

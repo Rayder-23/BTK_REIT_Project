@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/BTK_REIT_API/">
+    <Project Path="BTK_REIT_API/REIT_Project.csproj" />
+  </Folder>
+  <Project Path="BTK_REIT_Shared/BTK_REIT_Shared.csproj" />
+  <Project Path="BTK_REIT_UI/BTK_REIT_UI.csproj" />
+</Solution>

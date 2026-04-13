@@ -1,55 +1,82 @@
-# Bahria Town REIT — Management API
+# BTK REIT Management System
 
-ASP.NET Core Web API (.NET 10) for managing Real Estate Investment Trust operations including property onboarding, shareholder management, rental income, dividend distribution, and expense tracking.
+Full-stack management platform for the BTK REIT. Three-project .NET 10 solution covering API, shared contracts, and a Blazor Server UI.
+
+## Solution Structure
+
+```
+BTK_REIT/
+├── BTK_REIT_API/        ASP.NET Core 10 Web API — business logic, EF Core, SQL Server
+├── BTK_REIT_Shared/     Class library — DTOs shared between API and UI
+├── BTK_REIT_UI/         Blazor Server 10 — dashboard frontend
+└── BTK_REIT.slnx        Solution file
+```
 
 ## Tech Stack
 
-- **Framework**: ASP.NET Core 10 Web API
-- **ORM**: Entity Framework Core 10 (Code-First)
-- **Database**: SQL Server (SQLEXPRESS)
-- **Docs**: Scalar / OpenAPI
+| Layer | Technology |
+|-------|-----------|
+| API | ASP.NET Core 10, Entity Framework Core 10 |
+| Database | SQL Server Express (`TAZ\SQLEXPRESS`, database `REIT`) |
+| API Docs | Scalar / OpenAPI (`/scalar/v1`) |
+| Frontend | Blazor Server (.NET 10) |
+| Shared | .NET 10 Class Library |
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
-- .NET 10 SDK
-- SQL Server Express (`TAZ\SQLEXPRESS`) with a database named `REIT`
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- SQL Server Express with a database named `REIT`
+- `dotnet-ef` global tool: `dotnet tool install --global dotnet-ef`
 
-### Setup
+## First-Time Setup
 
-1. Clone the repository
-2. Configure user secrets (never commit credentials):
-   ```bash
-   .\setup-secrets.ps1
-   ```
-3. Apply migrations:
-   ```bash
-   dotnet ef database update
-   ```
-4. Run the API:
-   ```bash
-   dotnet run
-   ```
+```bash
+# 1. Clone
+git clone <repo-url>
+cd BTK_REIT_Project
 
-API is available at `http://localhost:5039` — Scalar docs at `/scalar/v1`.
+# 2. Set the connection string (stored in user secrets, never committed)
+cd BTK_REIT_API
+.\setup-secrets.ps1
 
-## API Modules
+# 3. Apply EF Core migrations
+dotnet ef database update
+```
 
-| Module | Base Route | Description |
+## Running the Solution
+
+Open two terminals from the solution root:
+
+```bash
+# Terminal 1 — API (http://localhost:5039)
+cd BTK_REIT_API
+dotnet run
+
+# Terminal 2 — UI (https://localhost:7235)
+cd BTK_REIT_UI
+dotnet run
+```
+
+Navigate to `https://localhost:7235` in your browser.  
+API docs (Scalar) are at `http://localhost:5039/scalar/v1`.
+
+## Domain Modules
+
+| Module | API Route | Description |
 |--------|-----------|-------------|
-| Properties | `/api/Property` | Onboard properties and trust funds |
-| Shareholders | `/api/Shareholder` | Register shareholders and bank accounts |
-| Trust Funds | `/api/TrustFunds` | View fund details |
-| Transfers | `/api/Transfer` | Initiate and complete ownership transfers |
-| Payments | `/api/Payment` | Track and settle shareholder payments |
-| Rental Income | `/api/Rental` | Record and receive rental payments |
-| Dividends | `/api/Dividend` | Calculate and confirm dividend payouts |
-| Expenses | `/api/Expense` | Record, settle, and dispute fund expenses |
-| Configurations | `/api/Config` | Manage system-wide key/value settings |
+| Properties | `/api/properties` | Onboard properties and trust funds |
+| Shareholders | `/api/shareholders` | Register shareholders and bank accounts |
+| Trust Funds | `/api/trustfunds` | View fund details and ownership |
+| Transfers | `/api/transfers` | Initiate and complete share transfers |
+| Payments | `/api/payment` | Track and settle shareholder investments |
+| Rental Income | `/api/rental` | Record and receive rental payments |
+| Dividends | `/api/dividend` | Calculate and confirm dividend payouts |
+| Expenses | `/api/expense` | Record, settle, and dispute fund expenses |
+| Config | `/api/config` | System-wide key/value settings |
+| Logs | `/api/log` | Audit trail |
 
-## Key Concepts
+## Project READMEs
 
-- All multi-step writes use `CreateExecutionStrategy` + `BeginTransactionAsync` for ACID compliance
-- Every state change is logged via `IAuditService` to the `Logs` table
-- REIT entity (`sh_id = 1`) must retain a minimum 10% stake in all funds
-- Ownership percentages across active `FundDetails` must always sum to 100%
+- [BTK_REIT_API/README.md](BTK_REIT_API/README.md) — API setup, architecture, business rules
+- [BTK_REIT_Shared/README.md](BTK_REIT_Shared/README.md) — Shared DTO library
+- [BTK_REIT_UI/README.md](BTK_REIT_UI/README.md) — Blazor UI setup and pages

@@ -1,0 +1,107 @@
+/* ── Brand header ─────────────────────────────────────────── */
+.reit-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1.2rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    margin-bottom: 0.5rem;
+}
+
+.reit-brand-icon {
+    font-size: 1.5rem;
+    color: #e8b04b;
+}
+
+.reit-brand-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.05em;
+}
+
+/* ── Section headings ─────────────────────────────────────── */
+.reit-nav-section {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 1rem 1.25rem 0.3rem;
+    text-transform: uppercase;
+}
+
+/* ── Nav items ────────────────────────────────────────────── */
+.reit-nav {
+    padding: 0;
+}
+
+.nav-item {
+    padding: 0.1rem 0.75rem;
+}
+
+    .nav-item ::deep .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: rgba(255, 255, 255, 0.75);
+        background: none;
+        border: none;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        width: 100%;
+        text-decoration: none;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-item ::deep a.active {
+        background-color: rgba(232, 176, 75, 0.2);
+        color: #e8b04b;
+        font-weight: 600;
+    }
+
+    .nav-item ::deep .nav-link:hover {
+        background-color: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+    }
+
+.nav-icon {
+    font-size: 0.9rem;
+    width: 1.1rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ── Mobile toggler ───────────────────────────────────────── */
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 3rem;
+    height: 2.2rem;
+    position: absolute;
+    top: 0.65rem;
+    right: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255,255,255,0.7%29' stroke-linecap='round' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.5rem transparent;
+}
+
+.nav-scrollable {
+    display: none;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+}
+
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        display: block;
+        height: calc(100vh - 4rem);
+        overflow-y: auto;
+    }
+}

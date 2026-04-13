@@ -1,0 +1,13 @@
+# API-specific ignores
+# Common patterns (bin/, obj/, .vs/, secrets, etc.) are handled by the root .gitignore.
+
+# EF Core migrations snapshot (regenerated from the database; not useful to track)
+# Uncomment if you want to exclude generated migration files:
+# Migrations/
+
+# Local SQL scripts that may contain raw credentials or one-time fixes
+Scripts/local_*.sql
+Scripts/temp_*.sql
+
+# User secrets file (connection strings — stored outside the repo by dotnet user-secrets)
+secrets.json
