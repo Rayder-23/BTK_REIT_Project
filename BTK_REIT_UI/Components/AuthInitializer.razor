@@ -1,0 +1,11 @@
+@* Invisible component — initializes auth state from local storage on first render. *@
+@rendermode InteractiveServer
+@inject BTK_REIT_UI.Services.AuthService AuthService
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await AuthService.InitializeAsync();
+    }
+}

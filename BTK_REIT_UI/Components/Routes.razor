@@ -1,6 +1,21 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+@using Microsoft.AspNetCore.Components.Authorization
+
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @* Redirect any unauthenticated access to the login page *@
+                <RedirectToLogin />
+            </NotAuthorized>
+            <Authorizing>
+                @* Shown briefly while auth state is being determined *@
+                <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f1f5f9;">
+                    <div class="spinner-border text-secondary" role="status">
+                        <span class="visually-hidden">Checking session&hellip;</span>
+                    </div>
+                </div>
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
