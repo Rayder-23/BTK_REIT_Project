@@ -15,4 +15,9 @@ public class TransferDto
     public DateOnly? TransferDate { get; set; }
     public string Status { get; set; } = null!;
     public string? Notes { get; set; }
+
+    // Resolved display fields — populated by GET /api/transfers
+    public string? FromShName { get; set; }
+    public string? ToShName { get; set; }
+    public string? FundTitle { get; set; }
 }

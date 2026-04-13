@@ -1,17 +1,52 @@
 @inherits LayoutComponentBase
 
 <div class="reit-layout">
-    <nav class="reit-sidebar">
-        <NavMenu />
-    </nav>
 
+    @* ── Sidebar ── *@
+    <aside class="reit-sidebar">
+
+        @* Brand *@
+        <div class="reit-brand">
+            <div class="reit-brand-icon">
+                <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                </svg>
+            </div>
+            <div>
+                <div class="reit-brand-name">BTK REIT</div>
+                <div class="reit-brand-sub">Management System</div>
+            </div>
+        </div>
+
+        @* Nav *@
+        <div class="reit-nav-scroll">
+            <NavMenu />
+        </div>
+
+        @* Footer *@
+        <div class="reit-sidebar-footer">
+            <span>v1.1.0</span>
+        </div>
+    </aside>
+
+    @* ── Main area ── *@
     <div class="reit-content-wrap">
+
+        @* Top bar *@
         <header class="reit-topbar">
             <span class="reit-topbar-title">BTK REIT Management System</span>
-            <span class="reit-topbar-badge">v1.1</span>
+            <div class="reit-topbar-right">
+                <span class="reit-topbar-badge">Live</span>
+                <div class="reit-topbar-user" title="Admin">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                    </svg>
+                </div>
+            </div>
         </header>
 
-        <main class="reit-main px-4 py-3">
+        @* Page content *@
+        <main class="reit-main">
             @Body
         </main>
     </div>
@@ -19,6 +54,6 @@
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    <a href="." class="ms-2 fw-semibold text-white">Reload</a>
     <span class="dismiss">&#x2715;</span>
 </div>

@@ -1,0 +1,182 @@
+@page "/trustfunds"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using BTK_REIT_Shared.DTOs
+
+<PageTitle>Trust Funds — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Trust Funds</h1>
+        <p class="reit-page-subtitle">Investment vehicles and fund holdings</p>
+    </div>
+    @if (funds is not null)
+    {
+        <span class="reit-count-pill">
+            <span class="reit-count-dot"></span>
+            @funds.Count fund@(funds.Count == 1 ? "" : "s")
+        </span>
+    }
+</div>
+
+@* ── Error state ── *@
+@if (errorMessage is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load trust funds</p>
+            <p class="mb-0">@errorMessage</p>
+        </div>
+    </div>
+}
+
+@* ── Loading state ── *@
+@if (funds is null && errorMessage is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading trust funds&hellip;</p>
+        </div>
+    </div>
+}
+@* ── Empty state ── *@
+else if (funds is not null && funds.Count == 0)
+{
+    <div class="reit-card">
+        <div class="reit-empty">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75"/>
+            </svg>
+            <p class="reit-empty-title">No funds found</p>
+            <p class="reit-empty-sub">No trust funds have been created yet.</p>
+        </div>
+    </div>
+}
+@* ── Fund list ── *@
+else if (funds is not null)
+{
+    @* AUM summary strip *@
+    <div class="reit-aum-strip mb-4">
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Funds</span>
+            <span class="reit-aum-value">@funds.Count</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Assets Under Management</span>
+            <span class="reit-aum-value mono">@FormatPkr(funds.Sum(f => f.FundTotalValue))</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Active Funds</span>
+            <span class="reit-aum-value">@funds.Count(f => f.StartDate.HasValue)</span>
+        </div>
+    </div>
+
+    <div class="reit-card">
+        @foreach (var (fund, index) in funds.Select((f, i) => (f, i)))
+        {
+            <div class="reit-fund-row @(index < funds.Count - 1 ? "reit-fund-row--border" : "")">
+
+                @* Left: identifier + titles *@
+                <div class="reit-fund-identity">
+                    <div class="reit-fund-icon">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="reit-fund-title">@(fund.FundTitle ?? fund.FundTitle1 ?? $"Fund #{fund.FundId}")</p>
+                        @if (!string.IsNullOrWhiteSpace(fund.FundTitle) && !string.IsNullOrWhiteSpace(fund.FundTitle1))
+                        {
+                            <p class="reit-fund-subtitle">@fund.FundTitle1</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(fund.Notes))
+                        {
+                            <p class="reit-fund-subtitle">@fund.Notes</p>
+                        }
+                    </div>
+                </div>
+
+                @* Centre: key metrics *@
+                <div class="reit-fund-metrics">
+                    <div class="reit-fund-metric">
+                        <span class="reit-fund-metric-label">Fund Value</span>
+                        <span class="reit-fund-metric-value mono">@FormatPkr(fund.FundTotalValue)</span>
+                    </div>
+                    <div class="reit-fund-metric">
+                        <span class="reit-fund-metric-label">Property</span>
+                        <span class="reit-fund-metric-value mono">#@fund.PropId</span>
+                    </div>
+                    <div class="reit-fund-metric">
+                        <span class="reit-fund-metric-label">Start Date</span>
+                        <span class="reit-fund-metric-value mono">
+                            @(fund.StartDate.HasValue ? fund.StartDate.Value.ToString("dd MMM yyyy") : "—")
+                        </span>
+                    </div>
+                    <div class="reit-fund-metric">
+                        <span class="reit-fund-metric-label">Created</span>
+                        <span class="reit-fund-metric-value mono">@fund.CreationDate.ToShortDateString()</span>
+                    </div>
+                </div>
+
+                @* Right: status badge + action *@
+                <div class="reit-fund-actions">
+                    <span class="badge-soft @GetFundStatusClass(fund)">@GetFundStatus(fund)</span>
+                    <a href="trustfunds/@fund.FundId" class="reit-btn-link mt-2">
+                        View Fund
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                        </svg>
+                    </a>
+                </div>
+
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<TrustFundDto>? funds;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            funds = await Http.GetFromJsonAsync<List<TrustFundDto>>("api/trustfunds");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"API unreachable — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private static string FormatPkr(decimal value) =>
+        "PKR " + value.ToString("N0");
+
+    private static string GetFundStatus(TrustFundDto fund)
+    {
+        if (!fund.StartDate.HasValue) return "Pending";
+        if (fund.StartDate.Value > DateTime.UtcNow) return "Scheduled";
+        return "Active";
+    }
+
+    private static string GetFundStatusClass(TrustFundDto fund) => GetFundStatus(fund) switch
+    {
+        "Active"    => "badge-active",
+        "Scheduled" => "badge-pending",
+        _           => "badge-inactive"
+    };
+}

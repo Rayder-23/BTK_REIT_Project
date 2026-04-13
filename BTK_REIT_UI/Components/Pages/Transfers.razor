@@ -1,0 +1,591 @@
+@page "/transfers"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+@using System.Net
+
+<PageTitle>Transfers — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Transfers</h1>
+        <p class="reit-page-subtitle">Share transfer history and initiation</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        @if (transfers is not null)
+        {
+            <span class="reit-count-pill">
+                <span class="reit-count-dot"></span>
+                @transfers.Count transfer@(transfers.Count == 1 ? "" : "s")
+            </span>
+        }
+        <button class="reit-btn-secondary" @onclick="LoadDataAsync" disabled="@isLoading">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-4.566l3.181 3.182m0-4.991v4.99"/>
+            </svg>
+            Refresh
+        </button>
+        <button class="reit-btn-primary" @onclick="ToggleForm">
+            @if (showInitiateForm)
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                <span>Cancel</span>
+            }
+            else
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                <span>Initiate Transfer</span>
+            }
+        </button>
+    </div>
+</div>
+
+@* ── Global error ── *@
+@if (loadError is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load transfers</p>
+            <p class="mb-0">@loadError</p>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   INITIATE TRANSFER FORM (slide-down panel)
+   ════════════════════════════════════════════════════════════ *@
+@if (showInitiateForm)
+{
+    <div class="reit-slide-panel mb-4">
+        <div class="reit-slide-panel-header">
+            <div>
+                <p class="reit-slide-panel-title">Initiate Transfer</p>
+                <p class="reit-slide-panel-sub">All fields are required. The transfer will be created with status <strong>Pending</strong>.</p>
+            </div>
+        </div>
+
+        @* Form-level feedback *@
+        @if (initiateSuccess is not null)
+        {
+            <div class="reit-alert-success mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>@initiateSuccess</span>
+            </div>
+        }
+        @if (initiateError is not null)
+        {
+            <div class="reit-alert-error mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                </svg>
+                <span>@initiateError</span>
+            </div>
+        }
+
+        <EditForm Model="initiateForm" OnValidSubmit="SubmitInitiateAsync">
+            <DataAnnotationsValidator />
+
+            <div class="reit-form-grid">
+
+                @* Fund *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Fund</label>
+                    @if (funds is not null)
+                    {
+                        <InputSelect class="reit-form-select" @bind-Value="initiateForm.FundId">
+                            <option value="0" disabled>— Select fund —</option>
+                            @foreach (var f in funds)
+                            {
+                                <option value="@f.FundId">@(f.FundTitle ?? f.FundTitle1 ?? $"Fund #{f.FundId}")</option>
+                            }
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        <input class="reit-form-select" disabled value="Loading funds…" />
+                    }
+                    <ValidationMessage For="@(() => initiateForm.FundId)" class="reit-form-validation" />
+                </div>
+
+                @* Transfer Type *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Transfer Type</label>
+                    <InputSelect class="reit-form-select" @bind-Value="initiateForm.TransferType">
+                        <option value="" disabled>— Select type —</option>
+                        <option value="sale">Sale</option>
+                        <option value="gift">Gift</option>
+                    </InputSelect>
+                    <ValidationMessage For="@(() => initiateForm.TransferType)" class="reit-form-validation" />
+                </div>
+
+                @* Seller *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Seller (From)</label>
+                    @if (shareholders is not null)
+                    {
+                        <InputSelect class="reit-form-select" @bind-Value="initiateForm.FromShId">
+                            <option value="0" disabled>— Select seller —</option>
+                            @foreach (var sh in shareholders.Where(s => s.Status == "active"))
+                            {
+                                <option value="@sh.ShId">@sh.FullName (@sh.UserName)</option>
+                            }
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        <input class="reit-form-select" disabled value="Loading shareholders…" />
+                    }
+                    <ValidationMessage For="@(() => initiateForm.FromShId)" class="reit-form-validation" />
+                </div>
+
+                @* Buyer *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Buyer (To)</label>
+                    @if (shareholders is not null)
+                    {
+                        <InputSelect class="reit-form-select" @bind-Value="initiateForm.ToShId">
+                            <option value="0" disabled>— Select buyer —</option>
+                            @foreach (var sh in shareholders.Where(s => s.Status == "active"))
+                            {
+                                <option value="@sh.ShId">@sh.FullName (@sh.UserName)</option>
+                            }
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        <input class="reit-form-select" disabled value="Loading shareholders…" />
+                    }
+                    <ValidationMessage For="@(() => initiateForm.ToShId)" class="reit-form-validation" />
+                </div>
+
+                @* Percentage *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Percentage to Transfer (%)</label>
+                    <InputNumber class="reit-form-input" @bind-Value="initiateForm.PctTransfer" placeholder="e.g. 10.00" />
+                    <ValidationMessage For="@(() => initiateForm.PctTransfer)" class="reit-form-validation" />
+                </div>
+
+                @* Agreed Price — only shown for sale *@
+                @if (initiateForm.TransferType == "sale")
+                {
+                    <div class="reit-form-group">
+                        <label class="reit-form-label">Agreed Price (PKR)</label>
+                        <InputNumber class="reit-form-input" @bind-Value="initiateForm.AgreedPrice" placeholder="e.g. 5000000" />
+                        <p class="reit-form-hint">Required for 'sale' transfers.</p>
+                    </div>
+                }
+
+                @* Initiating Admin ID *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Initiated By (Admin User ID)</label>
+                    <InputNumber class="reit-form-input" @bind-Value="initiateForm.UserId" placeholder="e.g. 1" />
+                    <ValidationMessage For="@(() => initiateForm.UserId)" class="reit-form-validation" />
+                </div>
+
+                @* Notes *@
+                <div class="reit-form-group reit-form-group--wide">
+                    <label class="reit-form-label">Notes <span class="reit-form-optional">(optional)</span></label>
+                    <InputTextArea class="reit-form-textarea" @bind-Value="initiateForm.Notes" rows="2" placeholder="Internal notes for this transfer…" />
+                </div>
+
+            </div>
+
+            <div class="reit-slide-panel-footer">
+                <button type="submit" class="reit-btn-primary" disabled="@isSubmittingInitiate">
+                    @if (isSubmittingInitiate)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Submitting…</span>
+                    }
+                    else
+                    {
+                        <span>Create Transfer</span>
+                    }
+                </button>
+                <button type="button" class="reit-btn-secondary" @onclick="ToggleForm">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   TRANSFER HISTORY TABLE
+   ════════════════════════════════════════════════════════════ *@
+@if (transfers is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading transfers&hellip;</p>
+        </div>
+    </div>
+}
+else if (transfers is not null && transfers.Count == 0)
+{
+    <div class="reit-card">
+        <div class="reit-empty">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/>
+            </svg>
+            <p class="reit-empty-title">No transfers found</p>
+            <p class="reit-empty-sub">No share transfers have been recorded yet.</p>
+        </div>
+    </div>
+}
+else if (transfers is not null)
+{
+    <div class="reit-card">
+        <div class="reit-table-wrap">
+            <table class="reit-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fund</th>
+                        <th>Type</th>
+                        <th>Seller</th>
+                        <th>Buyer</th>
+                        <th class="text-end">% Transferred</th>
+                        <th class="text-end">Agreed Price</th>
+                        <th>Status</th>
+                        <th>Initiated</th>
+                        <th>Completed</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in transfers)
+                    {
+                        <tr>
+                            <td class="mono text-muted-sm">@t.TransferId</td>
+                            <td>
+                                <span class="fw-medium">@(t.FundTitle ?? $"Fund #{t.FundId}")</span>
+                                <br /><span class="text-muted-sm">ID @t.FundId</span>
+                            </td>
+                            <td>
+                                <span class="badge-soft badge-inactive text-capitalize">@t.TransferType</span>
+                            </td>
+                            <td>
+                                <span class="fw-medium">@(t.FromShName ?? $"SH #{t.FromShId}")</span>
+                                <br /><span class="text-muted-sm">#@t.FromShId</span>
+                            </td>
+                            <td>
+                                <span class="fw-medium">@(t.ToShName ?? $"SH #{t.ToShId}")</span>
+                                <br /><span class="text-muted-sm">#@t.ToShId</span>
+                            </td>
+                            <td class="text-end mono fw-semibold">@t.PctTransfer.ToString("F2")%</td>
+                            <td class="text-end mono">
+                                @if (t.AgreedPrice.HasValue)
+                                {
+                                    <span>PKR @t.AgreedPrice.Value.ToString("N0")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted-sm">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge-soft @GetTransferStatusClass(t.Status)">@t.Status</span>
+                            </td>
+                            <td class="mono text-muted-sm">@t.InitiatedDate.ToShortDateString()</td>
+                            <td class="mono text-muted-sm">
+                                @(t.TransferDate.HasValue ? t.TransferDate.Value.ToShortDateString() : "—")
+                            </td>
+                            <td>
+                                @* Complete button — only for pending transfers *@
+                                @if (t.Status.Equals("pending", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    @if (expandedCompleteId == t.TransferId)
+                                    {
+                                        @* Inline payment form for sale transfers *@
+                                        @if (IsSaleTransfer(t))
+                                        {
+                                            <div class="reit-inline-form">
+                                                <p class="reit-inline-form-label">Payment Details</p>
+                                                <select class="reit-form-select reit-form-select--sm" @bind="completePayment.PaymentType">
+                                                    <option value="">— Payment type —</option>
+                                                    <option value="bank-transfer">Bank Transfer</option>
+                                                    <option value="cheque">Cheque</option>
+                                                    <option value="cash">Cash</option>
+                                                </select>
+                                                <input class="reit-form-input reit-form-input--sm" type="number" step="0.01" min="0"
+                                                       placeholder="Tax (PKR)" @bind="completePayment.Tax" />
+                                                <input class="reit-form-input reit-form-input--sm" type="number" step="0.01" min="0"
+                                                       placeholder="Amount Paid (PKR)" @bind="completePayment.AmountPaid" />
+                                                <input class="reit-form-input reit-form-input--sm" type="text"
+                                                       placeholder="Bank (optional)" @bind="completePayment.Bank" />
+                                                <input class="reit-form-input reit-form-input--sm" type="text"
+                                                       placeholder="DS/Cheque No. (optional)" @bind="completePayment.DsNo" />
+                                                <div class="d-flex gap-1 mt-1">
+                                                    <button class="reit-btn-primary reit-btn--xs"
+                                                            @onclick="@(() => CompleteTransferAsync(t.TransferId, t))"
+                                                            disabled="@(completingId == t.TransferId)">
+                                                        @if (completingId == t.TransferId)
+                                                        {
+                                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                        }
+                                                        else { <span>Confirm</span> }
+                                                    </button>
+                                                    <button class="reit-btn-secondary reit-btn--xs"
+                                                            @onclick="@(() => expandedCompleteId = null)">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @* Non-sale: confirm directly *@
+                                            <div class="d-flex gap-1">
+                                                <button class="reit-btn-primary reit-btn--xs"
+                                                        @onclick="@(() => CompleteTransferAsync(t.TransferId, t))"
+                                                        disabled="@(completingId == t.TransferId)">
+                                                    @if (completingId == t.TransferId)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                    }
+                                                    else { <span>Confirm</span> }
+                                                </button>
+                                                <button class="reit-btn-secondary reit-btn--xs"
+                                                        @onclick="@(() => expandedCompleteId = null)">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <button class="reit-btn-complete"
+                                                @onclick="@(() => ExpandComplete(t))">
+                                            Complete
+                                        </button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                        @* Per-row feedback ── shown directly below the row *@
+                        @if (rowFeedback.TryGetValue(t.TransferId, out var fb))
+                        {
+                            <tr class="reit-feedback-row">
+                                <td colspan="11">
+                                    <div class="@(fb.IsSuccess ? "reit-alert-success" : "reit-alert-error") reit-alert--compact">
+                                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            @if (fb.IsSuccess)
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            }
+                                            else
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                                            }
+                                        </svg>
+                                        <span>@fb.Message</span>
+                                        <button class="reit-alert-dismiss" @onclick="@(() => rowFeedback.Remove(t.TransferId))">&#x2715;</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Footer counts *@
+        <div class="reit-table-footer">
+            @{ var pending = transfers.Count(t => t.Status.Equals("pending", StringComparison.OrdinalIgnoreCase)); }
+            @{ var completed = transfers.Count(t => t.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)); }
+            <span>@transfers.Count total &nbsp;·&nbsp;</span>
+            <span class="text-warning-muted">@pending pending</span>
+            <span>&nbsp;·&nbsp;</span>
+            <span class="text-success-muted">@completed completed</span>
+        </div>
+    </div>
+}
+
+@code {
+    // ── State ────────────────────────────────────────────────────────────────
+
+    private List<TransferDto>?    transfers;
+    private List<ShareholderDto>? shareholders;
+    private List<TrustFundDto>?   funds;
+
+    private string? loadError;
+    private bool    isLoading;
+
+    // Initiate form
+    private bool                showInitiateForm;
+    private TransferInitiateDto initiateForm = new();
+    private bool                isSubmittingInitiate;
+    private string?             initiateSuccess;
+    private string?             initiateError;
+
+    // Complete flow
+    private int?              expandedCompleteId;
+    private int?              completingId;
+    private PaymentCompleteDto completePayment = new();
+    private Dictionary<int, (string Message, bool IsSuccess)> rowFeedback = new();
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync() =>
+        await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            // Parallel fetch
+            var tTask  = Http.GetFromJsonAsync<List<TransferDto>>("api/transfers");
+            var shTask = Http.GetFromJsonAsync<List<ShareholderDto>>("api/shareholders");
+            var fnTask = Http.GetFromJsonAsync<List<TrustFundDto>>("api/trustfunds");
+
+            await Task.WhenAll(tTask, shTask, fnTask);
+
+            transfers    = tTask.Result;
+            shareholders = shTask.Result;
+            funds        = fnTask.Result;
+        }
+        catch (HttpRequestException ex)
+        {
+            loadError = $"API unreachable — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Initiate form ─────────────────────────────────────────────────────────
+
+    private void ToggleForm()
+    {
+        showInitiateForm = !showInitiateForm;
+        initiateSuccess  = null;
+        initiateError    = null;
+        if (showInitiateForm)
+            initiateForm = new TransferInitiateDto { UserId = 1 };
+    }
+
+    private async Task SubmitInitiateAsync()
+    {
+        isSubmittingInitiate = true;
+        initiateSuccess      = null;
+        initiateError        = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/transfers/initiate", initiateForm);
+
+            if (response.IsSuccessStatusCode)
+            {
+                initiateSuccess = "Transfer initiated successfully. It appears below with status Pending.";
+                initiateForm    = new TransferInitiateDto { UserId = 1 };
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                initiateError = $"[{(int)response.StatusCode}] {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            initiateError = ex.Message;
+        }
+        finally
+        {
+            isSubmittingInitiate = false;
+        }
+    }
+
+    // ── Complete flow ─────────────────────────────────────────────────────────
+
+    private void ExpandComplete(TransferDto t)
+    {
+        expandedCompleteId = t.TransferId;
+        completePayment    = new PaymentCompleteDto();
+        rowFeedback.Remove(t.TransferId);
+    }
+
+    private async Task CompleteTransferAsync(int transferId, TransferDto t)
+    {
+        completingId = transferId;
+        StateHasChanged();
+
+        try
+        {
+            HttpResponseMessage response;
+
+            if (IsSaleTransfer(t))
+            {
+                response = await Http.PostAsJsonAsync(
+                    $"api/transfers/complete/{transferId}?userId=1",
+                    completePayment);
+            }
+            else
+            {
+                // Gift / inheritance — no body required
+                var req = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"api/transfers/complete/{transferId}?userId=1");
+                response = await Http.SendAsync(req);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                rowFeedback[transferId] = ("Transfer completed. Ownership has been updated.", true);
+                expandedCompleteId = null;
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                rowFeedback[transferId] = ($"[{(int)response.StatusCode}] {body}", false);
+                expandedCompleteId = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            rowFeedback[transferId] = (ex.Message, false);
+            expandedCompleteId = null;
+        }
+        finally
+        {
+            completingId = null;
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static bool IsSaleTransfer(TransferDto t) =>
+        t.TransferType.Equals("sale", StringComparison.OrdinalIgnoreCase) &&
+        t.AgreedPrice.HasValue;
+
+    private static string GetTransferStatusClass(string status) => status.ToLower() switch
+    {
+        "completed" => "badge-active",
+        "pending"   => "badge-pending",
+        "cancelled" => "badge-suspended",
+        _           => "badge-inactive"
+    };
+}

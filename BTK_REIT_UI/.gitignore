@@ -1,8 +1,11 @@
 # UI-specific ignores
 # Common patterns (bin/, obj/, .vs/, secrets, etc.) are handled by the root .gitignore.
 
-# Blazor WebAssembly framework files (generated on publish, not source)
+# Blazor framework files (generated on publish)
 wwwroot/_framework/
+
+# npm (no longer used — Tailwind removed)
+node_modules/
 
 # Local appsettings overrides
 appsettings.Development.json

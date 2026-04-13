@@ -1,0 +1,178 @@
+@page "/properties"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using BTK_REIT_Shared.DTOs
+
+<PageTitle>Properties — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Properties</h1>
+        <p class="reit-page-subtitle">Portfolio assets under management</p>
+    </div>
+    @if (properties is not null)
+    {
+        <span class="reit-count-pill">
+            <span class="reit-count-dot"></span>
+            @properties.Count asset@(properties.Count == 1 ? "" : "s")
+        </span>
+    }
+</div>
+
+@* ── Error state ── *@
+@if (errorMessage is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load properties</p>
+            <p class="mb-0">@errorMessage</p>
+        </div>
+    </div>
+}
+
+@* ── Loading state ── *@
+@if (properties is null && errorMessage is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading properties&hellip;</p>
+        </div>
+    </div>
+}
+@* ── Empty state ── *@
+else if (properties is not null && properties.Count == 0)
+{
+    <div class="reit-card">
+        <div class="reit-empty">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21"/>
+            </svg>
+            <p class="reit-empty-title">No assets found</p>
+            <p class="reit-empty-sub">No properties have been onboarded yet.</p>
+        </div>
+    </div>
+}
+@* ── Data table ── *@
+else if (properties is not null)
+{
+    <div class="reit-card">
+        <div class="reit-table-wrap">
+            <table class="reit-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Property Name</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th class="text-end">Purchase Price</th>
+                        <th class="text-end">Current Value</th>
+                        <th>Status</th>
+                        <th>Added</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in properties)
+                    {
+                        <tr>
+                            <td class="mono text-muted-sm">@p.PropId</td>
+                            <td>
+                                <span class="fw-semibold">@p.PropName</span>
+                                @if (!string.IsNullOrWhiteSpace(p.Notes))
+                                {
+                                    <br /><span class="text-muted-sm">@p.Notes</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge-soft badge-inactive text-capitalize">@p.PropType</span>
+                            </td>
+                            <td>
+                                <span class="fw-medium">@p.City</span>
+                                @if (!string.IsNullOrWhiteSpace(p.ProvinceState))
+                                {
+                                    <span class="text-muted-sm">, @p.ProvinceState</span>
+                                }
+                                <br /><span class="text-muted-sm">@p.Country</span>
+                            </td>
+                            <td class="text-end mono">@FormatPkr(p.PurchasePrice)</td>
+                            <td class="text-end mono">
+                                @if (p.CurrentValue.HasValue)
+                                {
+                                    <span class="@(p.CurrentValue >= p.PurchasePrice ? "text-gain" : "text-loss")">
+                                        @FormatPkr(p.CurrentValue.Value)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted-sm">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge-soft @GetPropertyStatusClass(p.Status)">@p.Status</span>
+                            </td>
+                            <td class="mono text-muted-sm">@p.DateAdded.ToShortDateString()</td>
+                            <td>
+                                <a href="properties/@p.PropId" class="reit-btn-link">
+                                    View
+                                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                                    </svg>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* ── Summary footer ── *@
+        <div class="reit-table-footer">
+            <span>@properties.Count propert@(properties.Count == 1 ? "y" : "ies") &nbsp;·&nbsp;</span>
+            <span>Total Purchase Value: <strong class="mono">@FormatPkr(properties.Sum(p => p.PurchasePrice))</strong></span>
+            @if (properties.Any(p => p.CurrentValue.HasValue))
+            {
+                <span>&nbsp;·&nbsp;Current Portfolio Value: <strong class="mono">@FormatPkr(properties.Sum(p => p.CurrentValue ?? p.PurchasePrice))</strong></span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<PropertyDto>? properties;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            properties = await Http.GetFromJsonAsync<List<PropertyDto>>("api/properties");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"API unreachable — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private static string FormatPkr(decimal value) =>
+        "PKR " + value.ToString("N0");
+
+    private static string GetPropertyStatusClass(string status) => status.ToLower() switch
+    {
+        "active"   => "badge-active",
+        "inactive" => "badge-inactive",
+        "sold"     => "badge-suspended",
+        "pending"  => "badge-pending",
+        _          => "badge-inactive"
+    };
+}

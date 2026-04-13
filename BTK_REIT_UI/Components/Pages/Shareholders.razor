@@ -1,63 +1,93 @@
 @page "/shareholders"
 @rendermode InteractiveServer
 @inject HttpClient Http
-
 @using BTK_REIT_Shared.DTOs
 
 <PageTitle>Shareholders — BTK REIT</PageTitle>
 
-<h1>Shareholders</h1>
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Shareholders</h1>
+        <p class="reit-page-subtitle">Registered investors and KYC records</p>
+    </div>
+    @if (shareholders is not null)
+    {
+        <span class="reit-count-pill">
+            <span class="reit-count-dot"></span>
+            @shareholders.Count record@(shareholders.Count == 1 ? "" : "s")
+        </span>
+    }
+</div>
 
+@* ── Error state ── *@
 @if (errorMessage is not null)
 {
-    <div class="reit-error">
-        <strong>Could not load data.</strong> @errorMessage
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load shareholders</p>
+            <p class="mb-0">@errorMessage</p>
+        </div>
     </div>
 }
 
+@* ── Loading state ── *@
 @if (shareholders is null && errorMessage is null)
 {
-    <p class="reit-loading">Loading shareholders...</p>
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading shareholders&hellip;</p>
+        </div>
+    </div>
 }
+@* ── Data table ── *@
 else if (shareholders is not null)
 {
-    <table class="reit-table">
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Full Name</th>
-                <th>Username</th>
-                <th>Type</th>
-                <th>Contact</th>
-                <th>Email</th>
-                <th>CNIC</th>
-                <th>Status</th>
-                <th>Since</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var sh in shareholders)
-            {
-                <tr>
-                    <td>@sh.ShId</td>
-                    <td>@sh.FullName</td>
-                    <td>@sh.UserName</td>
-                    <td>@sh.ShType</td>
-                    <td>@sh.ContactNo</td>
-                    <td>@sh.ContactEmail</td>
-                    <td>@(sh.Cnic ?? "-")</td>
-                    <td>
-                        <span class="@GetStatusBadgeClass(sh.Status)">@sh.Status</span>
-                    </td>
-                    <td>@sh.CreationDate.ToShortDateString()</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-
-    <p style="margin-top:0.75rem; font-size:0.8rem; color:#9ca3af;">
-        @shareholders.Count shareholder(s) loaded.
-    </p>
+    <div class="reit-card">
+        <div class="reit-table-wrap">
+            <table class="reit-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Full Name</th>
+                        <th>Username</th>
+                        <th>Type</th>
+                        <th>Contact</th>
+                        <th>Email</th>
+                        <th>CNIC</th>
+                        <th>Status</th>
+                        <th>Since</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sh in shareholders)
+                    {
+                        <tr>
+                            <td class="mono text-muted-sm">@sh.ShId</td>
+                            <td class="fw-semibold">@sh.FullName</td>
+                            <td class="text-muted-sm">@sh.UserName</td>
+                            <td>
+                                <span class="badge-soft badge-inactive">@sh.ShType</span>
+                            </td>
+                            <td class="mono">@sh.ContactNo</td>
+                            <td class="text-muted-sm">@sh.ContactEmail</td>
+                            <td class="mono text-muted-sm">@(sh.Cnic ?? "—")</td>
+                            <td>
+                                <span class="badge-soft @GetStatusBadgeClass(sh.Status)">@sh.Status</span>
+                            </td>
+                            <td class="mono text-muted-sm">@sh.CreationDate.ToShortDateString()</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
 }
 
 @code {
@@ -82,8 +112,9 @@ else if (shareholders is not null)
 
     private static string GetStatusBadgeClass(string status) => status.ToLower() switch
     {
-        "active"   => "badge-active",
-        "pending"  => "badge-pending",
-        _          => "badge-inactive"
+        "active"    => "badge-active",
+        "pending"   => "badge-pending",
+        "suspended" => "badge-suspended",
+        _           => "badge-inactive"
     };
 }

@@ -25,6 +25,74 @@ namespace REIT_Project.Controllers
             _validation = validation;
         }
 
+        // ── GET /api/transfers ───────────────────────────────────────────────
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<TransferDto>>> GetTransfers()
+        {
+            return await _context.Transfers
+                .Include(t => t.FromSh)
+                .Include(t => t.ToSh)
+                .Include(t => t.Fund)
+                .OrderByDescending(t => t.InitiatedDate)
+                .ThenByDescending(t => t.TransferId)
+                .Select(t => new TransferDto
+                {
+                    TransferId    = t.TransferId,
+                    TransferType  = t.TransferType,
+                    ApprovedBy    = t.ApprovedBy,
+                    FundId        = t.FundId,
+                    FundDtId      = t.FundDtId,
+                    FromShId      = t.FromShId,
+                    ToShId        = t.ToShId,
+                    PctTransfer   = t.PctTransfer,
+                    AgreedPrice   = t.AgreedPrice,
+                    InitiatedDate = t.InitiatedDate,
+                    TransferDate  = t.TransferDate,
+                    Status        = t.Status,
+                    Notes         = t.Notes,
+                    FromShName    = t.FromSh.FullName,
+                    ToShName      = t.ToSh.FullName,
+                    FundTitle     = t.Fund.FundTitle ?? t.Fund.FundTitle1
+                })
+                .ToListAsync();
+        }
+
+        // ── GET /api/transfers/{id} ──────────────────────────────────────────
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult<TransferDto>> GetTransfer(int id)
+        {
+            var t = await _context.Transfers
+                .Include(t => t.FromSh)
+                .Include(t => t.ToSh)
+                .Include(t => t.Fund)
+                .Where(t => t.TransferId == id)
+                .Select(t => new TransferDto
+                {
+                    TransferId    = t.TransferId,
+                    TransferType  = t.TransferType,
+                    ApprovedBy    = t.ApprovedBy,
+                    FundId        = t.FundId,
+                    FundDtId      = t.FundDtId,
+                    FromShId      = t.FromShId,
+                    ToShId        = t.ToShId,
+                    PctTransfer   = t.PctTransfer,
+                    AgreedPrice   = t.AgreedPrice,
+                    InitiatedDate = t.InitiatedDate,
+                    TransferDate  = t.TransferDate,
+                    Status        = t.Status,
+                    Notes         = t.Notes,
+                    FromShName    = t.FromSh.FullName,
+                    ToShName      = t.ToSh.FullName,
+                    FundTitle     = t.Fund.FundTitle ?? t.Fund.FundTitle1
+                })
+                .FirstOrDefaultAsync();
+
+            if (t == null)
+                return NotFound();
+
+            return t;
+        }
+
         // ── POST /api/transfers/initiate ─────────────────────────────────────
         [HttpPost("initiate")]
         public async Task<IActionResult> InitiateTransfer([FromBody] TransferInitiateDto dto)
