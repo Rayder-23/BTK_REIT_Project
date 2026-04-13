@@ -1,5 +1,8 @@
 # UI-specific ignores
 # Common patterns (bin/, obj/, .vs/, secrets, etc.) are handled by the root .gitignore.
+# ── Build output ──────────────────────────────────────────────────────────────
+bin/
+obj/
 
 # Blazor framework files (generated on publish)
 wwwroot/_framework/
