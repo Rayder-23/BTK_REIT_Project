@@ -1,0 +1,513 @@
+@page "/logs"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@inject NavigationManager Nav
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+@using System.Web
+
+<PageTitle>Audit Logs — BTK REIT</PageTitle>
+
+<style>
+    /* ── Inter font ── */
+    .audit-wrap { font-family: 'Inter', sans-serif; }
+
+    /* ── Filter bar ── */
+    .audit-filter-bar {
+        background: var(--reit-card-bg, #fff);
+        border: 1px solid var(--reit-border, #e5e7eb);
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem;
+        align-items: flex-end;
+    }
+    .audit-filter-group { display: flex; flex-direction: column; gap: .3rem; min-width: 160px; }
+    .audit-filter-group label { font-size: .72rem; font-weight: 600; color: var(--reit-muted, #6b7280); text-transform: uppercase; letter-spacing: .04em; }
+    .audit-filter-group select,
+    .audit-filter-group input { font-size: .82rem; padding: .38rem .6rem; border: 1px solid var(--reit-border, #d1d5db); border-radius: 6px; background: var(--reit-bg, #f9fafb); color: inherit; }
+    .audit-filter-group input[type="text"] { min-width: 200px; }
+    .audit-filter-actions { display: flex; gap: .5rem; align-items: flex-end; }
+
+    /* ── Table ── */
+    .audit-table { font-size: .8rem; }
+    .audit-table th { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--reit-muted, #6b7280); white-space: nowrap; }
+    .audit-table td { vertical-align: middle; }
+    .audit-table tbody tr { cursor: pointer; transition: background .12s; }
+    .audit-table tbody tr:hover { background: var(--reit-hover-bg, rgba(99,102,241,.04)); }
+    .audit-table tbody tr.audit-row--expanded { background: var(--reit-hover-bg, rgba(99,102,241,.06)); }
+
+    /* ── Action badges ── */
+    .audit-badge { display: inline-block; padding: .18em .55em; border-radius: 20px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+    .audit-badge--insert  { background: rgba(16,185,129,.12); color: #065f46; }
+    .audit-badge--update  { background: rgba(99,102,241,.12); color: #3730a3; }
+    .audit-badge--delete  { background: rgba(239,68,68,.12);  color: #991b1b; }
+    .audit-badge--login   { background: rgba(6,182,212,.12);  color: #155e75; }
+    .audit-badge--transfer{ background: rgba(245,158,11,.12); color: #92400e; }
+    .audit-badge--dividend{ background: rgba(245,158,11,.12); color: #92400e; }
+    .audit-badge--default { background: rgba(107,114,128,.1); color: #374151; }
+
+    /* ── Entity chip ── */
+    .audit-entity { display: inline-block; font-size: .68rem; font-weight: 600; padding: .15em .5em; border-radius: 4px; background: var(--reit-chip-bg, rgba(99,102,241,.08)); color: var(--reit-primary, #6366f1); }
+
+    /* ── Expandable detail panel ── */
+    .audit-detail-row td { padding: 0 !important; border-top: none !important; }
+    .audit-detail-panel {
+        background: var(--reit-code-bg, #f8fafc);
+        border-top: 1px dashed var(--reit-border, #e5e7eb);
+        padding: .75rem 1.25rem;
+        font-size: .78rem;
+        animation: fadeSlide .15s ease;
+    }
+    .audit-detail-panel .audit-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .5rem; }
+    .audit-diff-box { background: var(--reit-card-bg, #fff); border: 1px solid var(--reit-border, #e5e7eb); border-radius: 6px; padding: .6rem .8rem; }
+    .audit-diff-box--old { border-left: 3px solid #ef4444; }
+    .audit-diff-box--new { border-left: 3px solid #10b981; }
+    .audit-diff-label { font-size: .67rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; color: var(--reit-muted, #6b7280); }
+    .audit-diff-content { font-family: monospace; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+
+    @@keyframes fadeSlide { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ── Summary strip ── */
+    .audit-summary { font-size: .75rem; color: var(--reit-muted, #6b7280); margin-bottom: .5rem; }
+
+    /* ── Access denied ── */
+    .audit-denied { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 4rem 2rem; text-align: center; }
+    .audit-denied svg { width: 56px; height: 56px; color: #ef4444; opacity: .6; }
+    .audit-denied h2 { font-size: 1.2rem; font-weight: 700; margin: 0; }
+    .audit-denied p { color: var(--reit-muted, #6b7280); margin: 0; }
+</style>
+
+<div class="audit-wrap">
+
+@* ── Access control: SecurityLevel 1 = root only ── *@
+@if (!isAuthorized)
+{
+    <div class="audit-denied">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+        </svg>
+        <h2>Access Restricted</h2>
+        <p>Audit Logs are only accessible to root administrators (Security Level 1).</p>
+    </div>
+}
+else
+{
+    @* ── Page header ── *@
+    <div class="reit-page-header">
+        <div>
+            <h1 class="reit-page-title">Audit Logs</h1>
+            <p class="reit-page-subtitle">Complete activity ledger — every administrative action recorded</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            @if (logs is not null)
+            {
+                <span class="reit-count-pill">
+                    <span class="reit-count-dot"></span>
+                    @logs.Count shown
+                </span>
+            }
+            <button class="reit-btn-secondary" @onclick="ApplyFilters" disabled="@isLoading">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-4.566l3.181 3.182m0-4.991v4.99"/>
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    @* ── Filter bar ── *@
+    <div class="audit-filter-bar">
+        <div class="audit-filter-group">
+            <label>Admin User</label>
+            <select @bind="filterUserId">
+                <option value="">All admins</option>
+                @if (admins is not null)
+                {
+                    @foreach (var a in admins)
+                    {
+                        <option value="@a.UserId">@a.UserName</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div class="audit-filter-group">
+            <label>Entity / Table</label>
+            <select @bind="filterTable">
+                <option value="">All entities</option>
+                <option value="Property">Property</option>
+                <option value="Shareholder">Shareholder</option>
+                <option value="TrustFund">TrustFund</option>
+                <option value="FundDetails">FundDetails</option>
+                <option value="Dividend">Dividend</option>
+                <option value="Transfers">Transfers</option>
+                <option value="RentalIncome">RentalIncome</option>
+                <option value="Payments">Payments</option>
+                <option value="Expenses">Expenses</option>
+                <option value="SHBKAccounts">SHBKAccounts</option>
+                <option value="AdminUsers">AdminUsers</option>
+                <option value="Configurations">Configurations</option>
+                <option value="Logs">Logs</option>
+            </select>
+        </div>
+
+        <div class="audit-filter-group">
+            <label>From Date</label>
+            <input type="date" @bind="filterDateFrom" @bind:format="yyyy-MM-dd" />
+        </div>
+
+        <div class="audit-filter-group">
+            <label>To Date</label>
+            <input type="date" @bind="filterDateTo" @bind:format="yyyy-MM-dd" />
+        </div>
+
+        <div class="audit-filter-group">
+            <label>Search Description</label>
+            <input type="text" placeholder="e.g. ShareholderID 5, status=paid…"
+                   @bind="filterSearch" @bind:event="oninput"
+                   @onkeydown="OnSearchKeyDown" />
+        </div>
+
+        <div class="audit-filter-group">
+            <label>Limit</label>
+            <select @bind="filterLimit">
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+            </select>
+        </div>
+
+        <div class="audit-filter-actions">
+            <button class="reit-btn-primary" @onclick="ApplyFilters" disabled="@isLoading">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:14px;height:14px">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z"/>
+                </svg>
+                Search
+            </button>
+            <button class="reit-btn-secondary" @onclick="ClearFilters" disabled="@isLoading">
+                Clear
+            </button>
+        </div>
+    </div>
+
+    @* ── Error ── *@
+    @if (loadError is not null)
+    {
+        <div class="reit-error mb-4">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+            </svg>
+            <div>
+                <p class="reit-error-title">Could not load audit logs</p>
+                <p class="mb-0">@loadError</p>
+            </div>
+        </div>
+    }
+
+    @* ── Loading skeleton ── *@
+    @if (isLoading)
+    {
+        <div class="reit-loading">
+            <div class="reit-spinner"></div>
+            <span>Loading audit trail…</span>
+        </div>
+    }
+    else if (logs is not null)
+    {
+        @* ── Summary strip ── *@
+        <p class="audit-summary">
+            Showing @logs.Count log@(logs.Count == 1 ? "" : "s")
+            @if (!string.IsNullOrEmpty(filterTable)) { <span> · entity: <strong>@filterTable</strong></span> }
+            @if (filterUserIdInt.HasValue) { <span> · admin: <strong>@(admins?.FirstOrDefault(a => a.UserId == filterUserIdInt)?.UserName ?? filterUserId)</strong></span> }
+            @if (filterDateFrom.HasValue) { <span> · from <strong>@filterDateFrom.Value.ToString("dd MMM yyyy")</strong></span> }
+            @if (filterDateTo.HasValue) { <span> · to <strong>@filterDateTo.Value.ToString("dd MMM yyyy")</strong></span> }
+            @if (!string.IsNullOrEmpty(filterSearch)) { <span> · search: <strong>"@filterSearch"</strong></span> }
+        </p>
+
+        @* ── Table ── *@
+        <div class="reit-table-wrap">
+            <table class="table table-sm table-hover mb-0 audit-table">
+                <thead>
+                    <tr>
+                        <th style="width:160px">Timestamp</th>
+                        <th style="width:120px">Admin</th>
+                        <th style="width:90px">Action</th>
+                        <th style="width:110px">Entity</th>
+                        <th style="width:70px">Record ID</th>
+                        <th>Description</th>
+                        <th style="width:36px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in logs)
+                    {
+                        bool isExpanded = expandedLogId == log.LogId;
+                        <tr @onclick="() => ToggleExpand(log.LogId)"
+                            class="@(isExpanded ? "audit-row--expanded" : "")">
+                            <td class="text-nowrap">
+                                <span style="font-variant-numeric: tabular-nums;">
+                                    @log.CreationDate.ToString("yyyy-MM-dd")
+                                </span>
+                                <br />
+                                <span class="text-muted" style="font-size:.7rem;">
+                                    @log.CreationDate.ToString("HH:mm:ss") UTC
+                                </span>
+                            </td>
+                            <td>
+                                <span style="font-weight:600;">@(log.UserName ?? $"UID {log.UserId}")</span>
+                                <br />
+                                <span class="text-muted" style="font-size:.7rem;">ID @log.UserId</span>
+                            </td>
+                            <td><span class="audit-badge @GetActionBadgeClass(log.ActionDetails)">@GetActionLabel(log.ActionDetails)</span></td>
+                            <td><span class="audit-entity">@log.TableName</span></td>
+                            <td class="text-muted">#@log.RecordId</td>
+                            <td style="max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                @TruncateDescription(log.ActionDetails, 120)
+                            </td>
+                            <td class="text-center text-muted" style="font-size:.8rem;">
+                                @if (isExpanded)
+                                {
+                                    <span>&#x25B2;</span>
+                                }
+                                else if (HasDetail(log))
+                                {
+                                    <span>&#x25BC;</span>
+                                }
+                            </td>
+                        </tr>
+
+                        @* ── Expandable detail ── *@
+                        @if (isExpanded)
+                        {
+                            <tr class="audit-detail-row">
+                                <td colspan="7">
+                                    <div class="audit-detail-panel">
+                                        <strong style="font-size:.75rem;">Full Description</strong>
+                                        <p style="margin:.4rem 0 .6rem; line-height:1.6;">@log.ActionDetails</p>
+
+                                        @if (!string.IsNullOrWhiteSpace(log.OldInfo))
+                                        {
+                                            <strong style="font-size:.75rem;">Change Record</strong>
+                                            <div class="audit-diff-grid">
+                                                <div class="audit-diff-box audit-diff-box--old">
+                                                    <div class="audit-diff-label">Previous State</div>
+                                                    <div class="audit-diff-content">@log.OldInfo</div>
+                                                </div>
+                                                <div class="audit-diff-box audit-diff-box--new">
+                                                    <div class="audit-diff-label">After Change (from Description)</div>
+                                                    <div class="audit-diff-content">@ExtractNewState(log.ActionDetails)</div>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        @if (!string.IsNullOrWhiteSpace(log.Notes))
+                                        {
+                                            <p style="margin:.6rem 0 0; font-size:.75rem; color:var(--reit-muted,#6b7280);">
+                                                <strong>Notes:</strong> @log.Notes
+                                            </p>
+                                        }
+
+                                        <p style="margin:.5rem 0 0; font-size:.68rem; color:var(--reit-muted,#9ca3af);">
+                                            Log ID: @log.LogId &nbsp;·&nbsp; Admin ID: @log.UserId &nbsp;·&nbsp; @log.CreationDate.ToString("dddd, dd MMMM yyyy HH:mm:ss") UTC
+                                        </p>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (logs.Count == 0)
+        {
+            <div class="reit-empty-state">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/>
+                </svg>
+                <p>No audit log entries match the current filters.</p>
+            </div>
+        }
+    }
+}
+
+</div>
+
+@code {
+    // ── State ──────────────────────────────────────────────────────────────
+    private List<LogDto>?         logs;
+    private List<AdminSummary>?   admins;
+    private string?               loadError;
+    private bool                  isLoading = true;
+    private bool                  isAuthorized;
+    private int?                  expandedLogId;
+
+    // ── Filter bindings ────────────────────────────────────────────────────
+    private string    filterUserId   = "";
+    private string    filterTable    = "";
+    private DateTime? filterDateFrom;
+    private DateTime? filterDateTo;
+    private string    filterSearch   = "";
+    private int       filterLimit    = 200;
+
+    private int? filterUserIdInt => int.TryParse(filterUserId, out var n) ? n : null;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var session = AuthService.CurrentSession;
+        // Only SecurityLevel 1 (root admin) may view audit logs
+        isAuthorized = session is not null && session.SecurityLevel == 1;
+
+        if (isAuthorized)
+            await Task.WhenAll(LoadAdminsAsync(), ApplyFilters());
+        else
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAdminsAsync()
+    {
+        try
+        {
+            var resp = await Http.GetAsync("api/log/admins");
+            if (resp.IsSuccessStatusCode)
+                admins = (await resp.Content.ReadFromJsonAsync<List<AdminSummary>>()) ?? new();
+        }
+        catch { /* non-critical */ }
+    }
+
+    private async Task ApplyFilters()
+    {
+        isLoading  = true;
+        loadError  = null;
+        expandedLogId = null;
+        StateHasChanged();
+
+        try
+        {
+            var qs = BuildQueryString();
+            var resp = await Http.GetAsync($"api/log/recent{qs}");
+            if (resp.IsSuccessStatusCode)
+                logs = await resp.Content.ReadFromJsonAsync<List<LogDto>>() ?? new();
+            else
+                loadError = $"API error {(int)resp.StatusCode}: {await resp.Content.ReadAsStringAsync()}";
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string BuildQueryString()
+    {
+        var parts = new List<string> { $"limit={filterLimit}" };
+
+        if (!string.IsNullOrWhiteSpace(filterTable))
+            parts.Add($"tableName={Uri.EscapeDataString(filterTable)}");
+
+        if (filterUserIdInt.HasValue)
+            parts.Add($"userId={filterUserIdInt.Value}");
+
+        if (!string.IsNullOrWhiteSpace(filterSearch))
+            parts.Add($"search={Uri.EscapeDataString(filterSearch)}");
+
+        if (filterDateFrom.HasValue)
+            parts.Add($"dateFrom={filterDateFrom.Value:yyyy-MM-dd}");
+
+        if (filterDateTo.HasValue)
+            parts.Add($"dateTo={filterDateTo.Value:yyyy-MM-dd}");
+
+        return "?" + string.Join("&", parts);
+    }
+
+    private void ClearFilters()
+    {
+        filterUserId   = "";
+        filterTable    = "";
+        filterDateFrom = null;
+        filterDateTo   = null;
+        filterSearch   = "";
+        filterLimit    = 200;
+        _ = ApplyFilters();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ApplyFilters();
+    }
+
+    private void ToggleExpand(int logId)
+    {
+        expandedLogId = expandedLogId == logId ? null : logId;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static bool HasDetail(LogDto log) =>
+        !string.IsNullOrWhiteSpace(log.OldInfo) || log.ActionDetails.Length > 80;
+
+    private static string TruncateDescription(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "…";
+
+    /// <summary>
+    /// Reads the leading keyword (INSERT, UPDATE, DELETE, LOGIN, TRANSFER, DIVIDEND)
+    /// from ActionDetails to produce a short label.
+    /// </summary>
+    private static string GetActionLabel(string action)
+    {
+        if (action.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase))  return "Create";
+        if (action.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase))  return "Update";
+        if (action.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase))  return "Delete";
+        if (action.StartsWith("LOGIN",  StringComparison.OrdinalIgnoreCase))  return "Login";
+        if (action.StartsWith("TRANSFER", StringComparison.OrdinalIgnoreCase))return "Transfer";
+        if (action.StartsWith("DIVIDEND", StringComparison.OrdinalIgnoreCase))return "Dividend";
+        return "Action";
+    }
+
+    private static string GetActionBadgeClass(string action)
+    {
+        if (action.StartsWith("INSERT",   StringComparison.OrdinalIgnoreCase)) return "audit-badge--insert";
+        if (action.StartsWith("UPDATE",   StringComparison.OrdinalIgnoreCase)) return "audit-badge--update";
+        if (action.StartsWith("DELETE",   StringComparison.OrdinalIgnoreCase)) return "audit-badge--delete";
+        if (action.StartsWith("LOGIN",    StringComparison.OrdinalIgnoreCase)) return "audit-badge--login";
+        if (action.StartsWith("TRANSFER", StringComparison.OrdinalIgnoreCase)) return "audit-badge--transfer";
+        if (action.StartsWith("DIVIDEND", StringComparison.OrdinalIgnoreCase)) return "audit-badge--dividend";
+        return "audit-badge--default";
+    }
+
+    /// <summary>
+    /// Extracts a meaningful "new state" snippet from the ActionDetails string
+    /// to show alongside OldInfo in the diff view.
+    /// </summary>
+    private static string ExtractNewState(string action)
+    {
+        // Try to find everything after the first colon (convention: "UPDATE: field=val, …")
+        var idx = action.IndexOf(':');
+        if (idx >= 0 && idx < action.Length - 1)
+            return action[(idx + 1)..].Trim();
+        return action;
+    }
+
+    // ── Local helper DTO ───────────────────────────────────────────────────
+    private class AdminSummary
+    {
+        public int    UserId   { get; set; }
+        public string UserName { get; set; } = string.Empty;
+    }
+}

@@ -4,6 +4,8 @@ public class LogDto
 {
     public int LogId { get; set; }
     public int UserId { get; set; }
+    /// <summary>Populated by GET endpoints (joined from AdminUser).</summary>
+    public string? UserName { get; set; }
     public string TableName { get; set; } = null!;
     public int RecordId { get; set; }
     public string ActionDetails { get; set; } = null!;

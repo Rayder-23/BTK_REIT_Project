@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using REIT_Project.Models;
 using BTK_REIT_Shared.DTOs;
+using REIT_Project.Services;
 
 namespace REIT_Project.Controllers;
 
@@ -9,11 +10,13 @@ namespace REIT_Project.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private readonly ReitContext _context;
+    private readonly ReitContext  _context;
+    private readonly IAuditService _audit;
 
-    public AuthController(ReitContext context)
+    public AuthController(ReitContext context, IAuditService audit)
     {
         _context = context;
+        _audit   = audit;
     }
 
     /// <summary>
@@ -32,6 +35,14 @@ public class AuthController : ControllerBase
 
         // Update last login timestamp
         user.LastLogin = DateTime.UtcNow;
+
+        // Audit the login event
+        _audit.LogAction(
+            userId:    user.UserId,
+            tableName: "AdminUsers",
+            recordId:  user.UserId,
+            action:    $"LOGIN: Admin '{user.UserName}' authenticated successfully at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC.");
+
         await _context.SaveChangesAsync();
 
         var session = new UserSession
