@@ -5,7 +5,11 @@ public class DividendDto
     public int DivId { get; set; }
     public string DivType { get; set; } = null!;
     public int ShId { get; set; }
+    /// <summary>Populated by GET endpoints (joined from Shareholder).</summary>
+    public string? ShareholderName { get; set; }
     public int FundId { get; set; }
+    /// <summary>Populated by GET endpoints (joined from TrustFund).</summary>
+    public string? FundTitle { get; set; }
     public int FundDtId { get; set; }
     public int AccountId { get; set; }
     public decimal GrossDivAmount { get; set; }

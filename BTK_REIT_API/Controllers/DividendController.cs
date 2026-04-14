@@ -22,6 +22,83 @@ namespace REIT_Project.Controllers
             _audit = audit;
         }
 
+        // ── GET /api/dividend ────────────────────────────────────────────────
+        /// <summary>Returns all dividend records, most-recent period first.</summary>
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<DividendDto>>> GetAll()
+        {
+            var rows = await _context.Dividends
+                .AsNoTracking()
+                .Include(d => d.Sh)
+                .Include(d => d.Fund)
+                .OrderByDescending(d => d.Year)
+                .ThenByDescending(d => d.Month)
+                .ThenByDescending(d => d.DivId)
+                .Select(d => new DividendDto
+                {
+                    DivId          = d.DivId,
+                    DivType        = d.DivType,
+                    ShId           = d.ShId,
+                    ShareholderName = d.Sh.FullName,
+                    FundId         = d.FundId,
+                    FundTitle      = d.Fund.FundTitle1 ?? d.Fund.FundTitle ?? $"Fund #{d.FundId}",
+                    FundDtId       = d.FundDtId,
+                    AccountId      = d.AccountId,
+                    GrossDivAmount = d.GrossDivAmount,
+                    Tax            = d.Tax,
+                    Deduction      = d.Deduction,
+                    NetAmountPaid  = d.NetAmountPaid,
+                    PaidOn         = d.PaidOn,
+                    PaymentMethod  = d.PaymentMethod,
+                    Status         = d.Status,
+                    Notes          = d.Notes,
+                    Month          = d.Month,
+                    Year           = d.Year
+                })
+                .ToListAsync();
+
+            return Ok(rows);
+        }
+
+        // ── GET /api/dividend/fund/{fundId} ─────────────────────────────────
+        /// <summary>Returns all dividend records for a specific fund.</summary>
+        [HttpGet("fund/{fundId:int}")]
+        public async Task<ActionResult<IEnumerable<DividendDto>>> GetByFund(int fundId)
+        {
+            var rows = await _context.Dividends
+                .AsNoTracking()
+                .Include(d => d.Sh)
+                .Include(d => d.Fund)
+                .Where(d => d.FundId == fundId)
+                .OrderByDescending(d => d.Year)
+                .ThenByDescending(d => d.Month)
+                .ThenByDescending(d => d.DivId)
+                .Select(d => new DividendDto
+                {
+                    DivId          = d.DivId,
+                    DivType        = d.DivType,
+                    ShId           = d.ShId,
+                    ShareholderName = d.Sh.FullName,
+                    FundId         = d.FundId,
+                    FundTitle      = d.Fund.FundTitle1 ?? d.Fund.FundTitle ?? $"Fund #{d.FundId}",
+                    FundDtId       = d.FundDtId,
+                    AccountId      = d.AccountId,
+                    GrossDivAmount = d.GrossDivAmount,
+                    Tax            = d.Tax,
+                    Deduction      = d.Deduction,
+                    NetAmountPaid  = d.NetAmountPaid,
+                    PaidOn         = d.PaidOn,
+                    PaymentMethod  = d.PaymentMethod,
+                    Status         = d.Status,
+                    Notes          = d.Notes,
+                    Month          = d.Month,
+                    Year           = d.Year
+                })
+                .ToListAsync();
+
+            return Ok(rows);
+        }
+
         // ── POST /api/Dividend/calculate ─────────────────────────────────────
         /// <summary>
         /// Prepares one 'pending' Dividend row per eligible shareholder for the

@@ -1,0 +1,568 @@
+@page "/rental"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+
+<PageTitle>Rental Income — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Rental Income</h1>
+        <p class="reit-page-subtitle">Property revenue tracking and payment recording</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        @if (records is not null)
+        {
+            <span class="reit-count-pill">
+                <span class="reit-count-dot"></span>
+                @records.Count record@(records.Count == 1 ? "" : "s")
+            </span>
+        }
+        <button class="reit-btn-secondary" @onclick="LoadDataAsync" disabled="@isLoading">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-4.566l3.181 3.182m0-4.991v4.99"/>
+            </svg>
+            Refresh
+        </button>
+        <button class="reit-btn-primary" @onclick="ToggleForm">
+            @if (showForm)
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                <span>Cancel</span>
+            }
+            else
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                <span>Log Rent</span>
+            }
+        </button>
+    </div>
+</div>
+
+@* ── Load error ── *@
+@if (loadError is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load rental income records</p>
+            <p class="mb-0">@loadError</p>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   LOG RENT FORM
+   ════════════════════════════════════════════════════════════ *@
+@if (showForm)
+{
+    <div class="reit-slide-panel mb-4">
+        <div class="reit-slide-panel-header">
+            <div>
+                <p class="reit-slide-panel-title">Log Rental Income</p>
+                <p class="reit-slide-panel-sub">Record the expected rent for a fund period. Status starts as <strong>Overdue</strong> until payment is received.</p>
+            </div>
+        </div>
+
+        @if (formSuccess is not null)
+        {
+            <div class="reit-alert-success mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>@formSuccess</span>
+            </div>
+        }
+        @if (formError is not null)
+        {
+            <div class="reit-alert-error mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                </svg>
+                <span>@formError</span>
+            </div>
+        }
+
+        <EditForm Model="logForm" OnValidSubmit="SubmitLogAsync">
+            <DataAnnotationsValidator />
+
+            <div class="reit-form-grid">
+
+                @* Fund *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Fund</label>
+                    @if (funds is not null)
+                    {
+                        <InputSelect class="reit-form-select" @bind-Value="logForm.FundId">
+                            <option value="0" disabled>— Select fund —</option>
+                            @foreach (var f in funds)
+                            {
+                                <option value="@f.FundId">@(f.FundTitle1 ?? f.FundTitle ?? $"Fund #{f.FundId}")</option>
+                            }
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        <input class="reit-form-select" disabled value="Loading funds…" />
+                    }
+                    <ValidationMessage For="@(() => logForm.FundId)" class="reit-form-validation" />
+                </div>
+
+                @* Amount Due *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Amount Due (PKR)</label>
+                    <InputNumber class="reit-form-input" @bind-Value="logForm.AmountDue" placeholder="e.g. 250000" />
+                    <ValidationMessage For="@(() => logForm.AmountDue)" class="reit-form-validation" />
+                </div>
+
+                @* Period: Month *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Period — Month</label>
+                    <InputSelect class="reit-form-select" @bind-Value="logForm.RentMonth">
+                        <option value="0" disabled>— Select month —</option>
+                        @for (int m = 1; m <= 12; m++)
+                        {
+                            var month = m;
+                            <option value="@month">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => logForm.RentMonth)" class="reit-form-validation" />
+                </div>
+
+                @* Period: Year *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Period — Year</label>
+                    <InputNumber class="reit-form-input" @bind-Value="logForm.RentYear" placeholder="e.g. 2025" />
+                    <ValidationMessage For="@(() => logForm.RentYear)" class="reit-form-validation" />
+                </div>
+
+                @* Due Date *@
+                <div class="reit-form-group">
+                    <label class="reit-form-label">Due Date</label>
+                    <InputDate class="reit-form-input" @bind-Value="logForm.DueDate" />
+                    <ValidationMessage For="@(() => logForm.DueDate)" class="reit-form-validation" />
+                </div>
+
+                @* Notes *@
+                <div class="reit-form-group reit-form-group--wide">
+                    <label class="reit-form-label">Notes <span class="reit-form-optional">(optional)</span></label>
+                    <InputTextArea class="reit-form-textarea" @bind-Value="logForm.Notes" rows="2" placeholder="Internal notes for this rental period…" />
+                </div>
+
+            </div>
+
+            <div class="reit-slide-panel-footer">
+                <button type="submit" class="reit-btn-primary" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Saving…</span>
+                    }
+                    else
+                    {
+                        <span>Log Rental Income</span>
+                    }
+                </button>
+                <button type="button" class="reit-btn-secondary" @onclick="ToggleForm">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   AUM SUMMARY STRIP
+   ════════════════════════════════════════════════════════════ *@
+@if (records is not null && records.Count > 0)
+{
+    <div class="reit-aum-strip mb-4">
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Records</span>
+            <span class="reit-aum-value">@records.Count</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Billed</span>
+            <span class="reit-aum-value mono">@FormatPkr(records.Sum(r => r.AmountDue))</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Collected</span>
+            <span class="reit-aum-value mono">@FormatPkr(records.Sum(r => r.AmountPaid))</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Paid Records</span>
+            <span class="reit-aum-value">@records.Count(r => r.Status == "paid")</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Overdue</span>
+            <span class="reit-aum-value">@records.Count(r => r.Status == "overdue")</span>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   RECORD TABLE
+   ════════════════════════════════════════════════════════════ *@
+@if (records is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <p class="mb-0">Loading rental income records&hellip;</p>
+        </div>
+    </div>
+}
+else if (records is not null && records.Count == 0)
+{
+    <div class="reit-card">
+        <div class="reit-empty">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+            </svg>
+            <p class="reit-empty-title">No rental income records</p>
+            <p class="reit-empty-sub">Click "Log Rent" to record the first rental period.</p>
+        </div>
+    </div>
+}
+else if (records is not null)
+{
+    <div class="reit-card shadow-sm">
+        <div class="reit-table-wrap">
+            <table class="reit-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fund</th>
+                        <th>Period</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Amount Due</th>
+                        <th class="text-end">Amount Paid</th>
+                        <th class="text-end">Late Fee</th>
+                        <th>Payment Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in records)
+                    {
+                        <tr>
+                            <td class="mono text-muted-sm">@r.RentId</td>
+                            <td>
+                                <span class="fw-medium">@(r.FundTitle ?? $"Fund #{r.FundId}")</span>
+                                <br /><span class="text-muted-sm">ID @r.FundId</span>
+                            </td>
+                            <td class="mono">
+                                @System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedMonthName(r.RentMonth) @r.RentYear
+                            </td>
+                            <td class="mono text-muted-sm">@r.DueDate.ToString("dd MMM yyyy")</td>
+                            <td class="text-end mono fw-semibold">@FormatPkr(r.AmountDue)</td>
+                            <td class="text-end mono @(r.AmountPaid >= r.AmountDue && r.AmountDue > 0 ? "text-success-muted fw-semibold" : "")">
+                                @FormatPkr(r.AmountPaid)
+                            </td>
+                            <td class="text-end mono text-muted-sm">
+                                @(r.LateFee > 0 ? FormatPkr(r.LateFee) : "—")
+                            </td>
+                            <td class="mono text-muted-sm">
+                                @(r.PaymentDate.HasValue ? r.PaymentDate.Value.ToString("dd MMM yyyy") : "—")
+                            </td>
+                            <td>
+                                <span class="badge-soft @GetStatusClass(r.Status)">@TitleCase(r.Status)</span>
+                            </td>
+                            <td>
+                                @if (!r.Status.Equals("paid", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    @if (expandedPayId == r.RentId)
+                                    {
+                                        <div class="reit-inline-form">
+                                            <p class="reit-inline-form-label">Record Payment</p>
+                                            <input class="reit-form-input reit-form-input--sm" type="number" step="0.01" min="0"
+                                                   placeholder="Amount Paid (PKR)" @bind="payForm.AmountPaid" />
+                                            <input class="reit-form-input reit-form-input--sm" type="number" step="0.01" min="0"
+                                                   placeholder="Late Fee (PKR)" @bind="payForm.LateFee" />
+                                            <input class="reit-form-input reit-form-input--sm" type="date"
+                                                   @bind="payFormDate" />
+                                            <div class="d-flex gap-1 mt-1">
+                                                <button class="reit-btn-primary reit-btn--xs"
+                                                        @onclick="@(() => SubmitPaymentAsync(r.RentId))"
+                                                        disabled="@(payingId == r.RentId)">
+                                                    @if (payingId == r.RentId)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                    }
+                                                    else { <span>Confirm</span> }
+                                                </button>
+                                                <button class="reit-btn-secondary reit-btn--xs"
+                                                        @onclick="@(() => expandedPayId = null)">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button class="reit-btn-complete" @onclick="@(() => ExpandPay(r.RentId))">
+                                            Receive Payment
+                                        </button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                        @if (rowFeedback.TryGetValue(r.RentId, out var fb))
+                        {
+                            <tr class="reit-feedback-row">
+                                <td colspan="10">
+                                    <div class="@(fb.IsSuccess ? "reit-alert-success" : "reit-alert-error") reit-alert--compact">
+                                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            @if (fb.IsSuccess)
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            }
+                                            else
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                                            }
+                                        </svg>
+                                        <span>@fb.Message</span>
+                                        <button class="reit-alert-dismiss" @onclick="@(() => rowFeedback.Remove(r.RentId))">&#x2715;</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="reit-table-footer">
+            @{ var paidCount    = records.Count(r => r.Status == "paid"); }
+            @{ var partialCount = records.Count(r => r.Status == "partial"); }
+            @{ var overdueCount = records.Count(r => r.Status == "overdue"); }
+            <span>@records.Count total &nbsp;·&nbsp;</span>
+            <span class="text-success-muted">@paidCount paid</span>
+            <span>&nbsp;·&nbsp;</span>
+            <span class="text-warning-muted">@partialCount partial</span>
+            <span>&nbsp;·&nbsp;</span>
+            <span style="color:var(--reit-danger,#ef4444)">@overdueCount overdue</span>
+        </div>
+    </div>
+}
+
+@code {
+    // ── State ─────────────────────────────────────────────────────────────────
+    private List<RentalIncomeDto>? records;
+    private List<TrustFundDto>?   funds;
+    private List<string>          rentalStatuses = new();
+    private string?               loadError;
+    private bool                  isLoading;
+
+    // Log rent form
+    private bool          showForm;
+    private RentFormModel logForm = new();
+    private bool          isSubmitting;
+    private string?       formSuccess;
+    private string?       formError;
+
+    // Receive payment inline
+    private int?         expandedPayId;
+    private int?         payingId;
+    private PayFormModel payForm = new();
+    private DateTime     payFormDate = DateTime.Today;
+
+    private Dictionary<int, (string Message, bool IsSuccess)> rowFeedback = new();
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var recTask = Http.GetFromJsonAsync<List<RentalIncomeDto>>("api/rental");
+            var fnTask  = Http.GetFromJsonAsync<List<TrustFundDto>>("api/trustfunds");
+            var cfgTask = Http.GetFromJsonAsync<List<ConfigurationDto>>("api/config");
+
+            await Task.WhenAll(recTask, fnTask, cfgTask);
+
+            records = recTask.Result;
+            funds   = fnTask.Result;
+
+            var statusEntry = cfgTask.Result?.FirstOrDefault(c =>
+                string.Equals(c.Key, "status_rent", StringComparison.OrdinalIgnoreCase));
+            if (statusEntry is not null)
+            {
+                rentalStatuses = statusEntry.Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+            }
+        }
+        catch (HttpRequestException ex) { loadError = $"API unreachable — {ex.Message}"; }
+        catch (Exception ex)            { loadError = ex.Message; }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Log rent form ─────────────────────────────────────────────────────────
+    private void ToggleForm()
+    {
+        showForm    = !showForm;
+        formSuccess = null;
+        formError   = null;
+        if (showForm)
+            logForm = new RentFormModel { RentYear = DateTime.Today.Year, RentMonth = DateTime.Today.Month };
+    }
+
+    private async Task SubmitLogAsync()
+    {
+        isSubmitting = true;
+        formSuccess  = null;
+        formError    = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 0;
+
+        try
+        {
+            var dto = new RentRecordDto
+            {
+                UserId    = adminId,
+                FundId    = logForm.FundId,
+                RentMonth = logForm.RentMonth,
+                RentYear  = logForm.RentYear,
+                DueDate   = DateOnly.FromDateTime(logForm.DueDate),
+                AmountDue = logForm.AmountDue,
+                Notes     = string.IsNullOrWhiteSpace(logForm.Notes) ? null : logForm.Notes.Trim()
+            };
+
+            var response = await Http.PostAsJsonAsync("api/rental/record", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                formSuccess = $"Rental income logged for {System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(logForm.RentMonth)} {logForm.RentYear}.";
+                logForm     = new RentFormModel { RentYear = DateTime.Today.Year, RentMonth = DateTime.Today.Month };
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                formError = $"[{(int)response.StatusCode}] {body}";
+            }
+        }
+        catch (Exception ex) { formError = ex.Message; }
+        finally { isSubmitting = false; }
+    }
+
+    // ── Receive payment inline ────────────────────────────────────────────────
+    private void ExpandPay(int rentId)
+    {
+        expandedPayId = rentId;
+        payForm       = new PayFormModel();
+        payFormDate   = DateTime.Today;
+        rowFeedback.Remove(rentId);
+    }
+
+    private async Task SubmitPaymentAsync(int rentId)
+    {
+        payingId = rentId;
+        StateHasChanged();
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 0;
+
+        try
+        {
+            var dto = new RentPaymentDto
+            {
+                UserId      = adminId,
+                AmountPaid  = payForm.AmountPaid,
+                LateFee     = payForm.LateFee,
+                PaymentDate = DateOnly.FromDateTime(payFormDate)
+            };
+
+            var response = await Http.PatchAsJsonAsync($"api/rental/receive-payment/{rentId}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                rowFeedback[rentId] = ("Payment recorded successfully.", true);
+                expandedPayId       = null;
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                rowFeedback[rentId] = ($"[{(int)response.StatusCode}] {body}", false);
+                expandedPayId       = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            rowFeedback[rentId] = (ex.Message, false);
+            expandedPayId       = null;
+        }
+        finally { payingId = null; }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string FormatPkr(decimal v) => "PKR " + v.ToString("N0");
+
+    private static string TitleCase(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+
+    private static string GetStatusClass(string status) => status.ToLower() switch
+    {
+        "paid"    => "badge-active",
+        "partial" => "badge-pending",
+        "overdue" => "badge-inactive",
+        _         => "badge-soft"
+    };
+
+    // ── Local form models ─────────────────────────────────────────────────────
+    private class RentFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue, ErrorMessage = "Select a fund.")]
+        public int FundId { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(1, 12, ErrorMessage = "Select a month.")]
+        public int RentMonth { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(2000, 2100, ErrorMessage = "Enter a valid year.")]
+        public int RentYear { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public DateTime DueDate { get; set; } = DateTime.Today;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(0.01, double.MaxValue, ErrorMessage = "Enter an amount greater than zero.")]
+        public decimal AmountDue { get; set; }
+
+        public string? Notes { get; set; }
+    }
+
+    private class PayFormModel
+    {
+        public decimal AmountPaid { get; set; }
+        public decimal LateFee    { get; set; }
+    }
+}

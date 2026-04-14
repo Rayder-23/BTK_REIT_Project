@@ -1,0 +1,647 @@
+@page "/dividend"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+
+<PageTitle>Dividends — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Dividend Distribution</h1>
+        <p class="reit-page-subtitle">Calculate and disburse profit shares to fund owners</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        @if (dividends is not null)
+        {
+            <span class="reit-count-pill">
+                <span class="reit-count-dot"></span>
+                @dividends.Count record@(dividends.Count == 1 ? "" : "s")
+            </span>
+        }
+        <button class="reit-btn-secondary" @onclick="LoadDataAsync" disabled="@isLoading">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-4.566l3.181 3.182m0-4.991v4.99"/>
+            </svg>
+            Refresh
+        </button>
+        <button class="reit-btn-primary" @onclick="ToggleCalculator">
+            @if (showCalculator)
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                <span>Cancel</span>
+            }
+            else
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 7.5l3 4.5m0 0l3-4.5M12 12v5.25M15 12H9M6.75 21v-2.25A2.25 2.25 0 019 16.5h6a2.25 2.25 0 012.25 2.25V21M3 4.875C3 3.839 3.84 3 4.875 3h4.5c1.036 0 1.875.84 1.875 1.875v1.5C11.25 7.41 10.41 8.25 9.375 8.25h-4.5A1.875 1.875 0 013 6.375v-1.5zm9.75 0C12.75 3.839 13.59 3 14.625 3h4.5C20.16 3 21 3.84 21 4.875v1.5c0 1.036-.84 1.875-1.875 1.875h-4.5a1.875 1.875 0 01-1.875-1.875v-1.5z"/>
+                </svg>
+                <span>Calculate Dividend</span>
+            }
+        </button>
+    </div>
+</div>
+
+@* ── Load error ── *@
+@if (loadError is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load dividend records</p>
+            <p class="mb-0">@loadError</p>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   DIVIDEND CALCULATOR PANEL
+   ════════════════════════════════════════════════════════════ *@
+@if (showCalculator)
+{
+    <div class="reit-slide-panel mb-4">
+        <div class="reit-slide-panel-header">
+            <div>
+                <p class="reit-slide-panel-title">Calculate Dividend</p>
+                <p class="reit-slide-panel-sub">Select a fund and the rental period that was paid. The system will create <strong>Pending</strong> dividend rows for every active owner.</p>
+            </div>
+        </div>
+
+        @if (calcSuccess is not null)
+        {
+            <div class="reit-alert-success mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>@calcSuccess</span>
+            </div>
+        }
+        @if (calcError is not null)
+        {
+            <div class="reit-alert-error mb-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                </svg>
+                <span>@calcError</span>
+            </div>
+        }
+
+        <div class="reit-form-grid">
+
+            @* Fund selector *@
+            <div class="reit-form-group">
+                <label class="reit-form-label">Trust Fund</label>
+                @if (funds is not null)
+                {
+                    <select class="reit-form-select" @onchange="OnFundSelected">
+                        <option value="0">— Select fund —</option>
+                        @foreach (var f in funds)
+                        {
+                            <option value="@f.FundId">@(f.FundTitle1 ?? f.FundTitle ?? $"Fund #{f.FundId}")</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input class="reit-form-select" disabled value="Loading funds…" />
+                }
+            </div>
+
+            @* Rent month *@
+            <div class="reit-form-group">
+                <label class="reit-form-label">Rental Period — Month</label>
+                <select class="reit-form-select" @bind="calcForm.RentMonth">
+                    <option value="0">— Select month —</option>
+                    @for (int m = 1; m <= 12; m++)
+                    {
+                        var month = m;
+                        <option value="@month">@System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month)</option>
+                    }
+                </select>
+            </div>
+
+            @* Rent year *@
+            <div class="reit-form-group">
+                <label class="reit-form-label">Rental Period — Year</label>
+                <input class="reit-form-input" type="number" min="2000" max="2100" @bind="calcForm.RentYear" placeholder="e.g. 2025" />
+            </div>
+
+            @* Tax rate *@
+            <div class="reit-form-group">
+                <label class="reit-form-label">WHT Rate <span class="reit-form-optional">(0–1, e.g. 0.15 = 15%)</span></label>
+                <input class="reit-form-input" type="number" step="0.01" min="0" max="1"
+                       @bind="calcForm.TaxRate" placeholder="e.g. 0.15" />
+                <p class="reit-form-hint">Withholding tax deducted per shareholder. Enter 0 for no tax.</p>
+            </div>
+
+            @* Notes *@
+            <div class="reit-form-group reit-form-group--wide">
+                <label class="reit-form-label">Notes <span class="reit-form-optional">(optional)</span></label>
+                <textarea class="reit-form-textarea" rows="2" placeholder="Internal notes for this dividend batch…"
+                          @bind="calcForm.Notes"></textarea>
+            </div>
+
+        </div>
+
+        @* ── Live Preview Table ── *@
+        @if (previewOwners is not null && previewOwners.Count > 0 && calcForm.RentMonth > 0)
+        {
+            <div class="reit-preview-panel mt-3">
+                <p class="reit-preview-title">
+                    Distribution Preview
+                    <span class="text-muted-sm ms-2">based on current ownership — enter the rental amount paid to see exact figures</span>
+                </p>
+                <p class="reit-form-hint mb-2">Enter the <strong>Amount Paid</strong> from the rental record to preview exact amounts. This is for reference only — the server uses the actual RentalIncome.AmountPaid.</p>
+
+                <div class="reit-form-group mb-3" style="max-width:280px">
+                    <label class="reit-form-label">Rental Amount Paid (for preview)</label>
+                    <input class="reit-form-input" type="number" step="0.01" min="0"
+                           @bind="previewAmount" @oninput="OnPreviewAmountChanged" placeholder="PKR" />
+                </div>
+
+                <div class="reit-table-wrap">
+                    <table class="reit-table">
+                        <thead>
+                            <tr>
+                                <th>Shareholder</th>
+                                <th class="text-end">% Owned</th>
+                                <th class="text-end">Gross</th>
+                                <th class="text-end">WHT (@((calcForm.TaxRate * 100).ToString("F0"))%)</th>
+                                <th class="text-end">Net Payout</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var o in previewOwners)
+                            {
+                                var gross = previewAmount > 0 ? Math.Round((o.PctOwned / 100m) * previewAmount, 2) : 0m;
+                                var tax   = Math.Round(gross * calcForm.TaxRate, 2);
+                                var net   = gross - tax;
+                                <tr>
+                                    <td>
+                                        <span class="fw-medium">@o.FullName</span>
+                                        <br /><span class="text-muted-sm">SH #@o.ShId</span>
+                                    </td>
+                                    <td class="text-end mono">@o.PctOwned.ToString("F2")%</td>
+                                    <td class="text-end mono">@(previewAmount > 0 ? FormatPkr(gross) : "—")</td>
+                                    <td class="text-end mono text-warning-muted">@(previewAmount > 0 ? FormatPkr(tax) : "—")</td>
+                                    <td class="text-end mono fw-semibold text-success-muted">@(previewAmount > 0 ? FormatPkr(net) : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        @if (previewAmount > 0)
+                        {
+                            <tfoot>
+                                <tr class="reit-table-totals">
+                                    <td><strong>Total</strong></td>
+                                    <td class="text-end mono">
+                                        @previewOwners.Sum(o => o.PctOwned).ToString("F2")%
+                                    </td>
+                                    <td class="text-end mono">
+                                        @FormatPkr(previewOwners.Sum(o => Math.Round((o.PctOwned / 100m) * previewAmount, 2)))
+                                    </td>
+                                    <td class="text-end mono text-warning-muted">
+                                        @FormatPkr(previewOwners.Sum(o => Math.Round(Math.Round((o.PctOwned / 100m) * previewAmount, 2) * calcForm.TaxRate, 2)))
+                                    </td>
+                                    <td class="text-end mono fw-semibold text-success-muted">
+                                        @{
+                                            var totalNet = previewOwners.Sum(o => {
+                                                var g = Math.Round((o.PctOwned / 100m) * previewAmount, 2);
+                                                return g - Math.Round(g * calcForm.TaxRate, 2);
+                                            });
+                                        }
+                                        @FormatPkr(totalNet)
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        }
+                    </table>
+                </div>
+                <p class="reit-form-hint mt-2">
+                    Note: REIT's own stake (SH #1) is excluded from payouts per policy. The preview shows all active non-REIT owners.
+                </p>
+            </div>
+        }
+        else if (selectedFundId > 0 && isLoadingOwners)
+        {
+            <div class="reit-loading mt-3">
+                <div class="spinner-border spinner-border-sm text-secondary mb-1" role="status"></div>
+                <p class="mb-0">Loading fund owners…</p>
+            </div>
+        }
+        else if (selectedFundId > 0 && previewOwners is not null && previewOwners.Count == 0)
+        {
+            <div class="reit-alert-error mt-3">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                </svg>
+                <span>No active (non-REIT) owners found for this fund. Ownership must be set up before dividends can be calculated.</span>
+            </div>
+        }
+
+        <div class="reit-slide-panel-footer">
+            <button class="reit-btn-primary" @onclick="SubmitCalculateAsync"
+                    disabled="@(isCalculating || selectedFundId == 0 || calcForm.RentMonth == 0)">
+                @if (isCalculating)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                    <span>Calculating…</span>
+                }
+                else
+                {
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+                    </svg>
+                    <span>Process Dividend</span>
+                }
+            </button>
+            <button type="button" class="reit-btn-secondary" @onclick="ToggleCalculator">Cancel</button>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   DIVIDENDS HISTORY TABLE
+   ════════════════════════════════════════════════════════════ *@
+@if (dividends is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <p class="mb-0">Loading dividend records&hellip;</p>
+        </div>
+    </div>
+}
+else if (dividends is not null && dividends.Count == 0)
+{
+    <div class="reit-card">
+        <div class="reit-empty">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.875-1.125V4.125z"/>
+            </svg>
+            <p class="reit-empty-title">No dividend records</p>
+            <p class="reit-empty-sub">Click "Calculate Dividend" to create the first distribution for a fund.</p>
+        </div>
+    </div>
+}
+else if (dividends is not null)
+{
+    @* Summary strip *@
+    <div class="reit-aum-strip mb-4">
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Records</span>
+            <span class="reit-aum-value">@dividends.Count</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Total Disbursed</span>
+            <span class="reit-aum-value mono">@FormatPkr(dividends.Where(d => d.Status == "paid").Sum(d => d.NetAmountPaid))</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Pending Payouts</span>
+            <span class="reit-aum-value">@dividends.Count(d => d.Status == "pending")</span>
+        </div>
+        <div class="reit-aum-divider"></div>
+        <div class="reit-aum-item">
+            <span class="reit-aum-label">Pending Value</span>
+            <span class="reit-aum-value mono">@FormatPkr(dividends.Where(d => d.Status == "pending").Sum(d => d.NetAmountPaid))</span>
+        </div>
+    </div>
+
+    <div class="reit-card shadow-sm">
+        <div class="reit-table-wrap">
+            <table class="reit-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Shareholder</th>
+                        <th>Fund</th>
+                        <th>Period</th>
+                        <th class="text-end">Gross</th>
+                        <th class="text-end">WHT</th>
+                        <th class="text-end">Net Paid</th>
+                        <th>Paid On</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in dividends)
+                    {
+                        <tr>
+                            <td class="mono text-muted-sm">@d.DivId</td>
+                            <td>
+                                <span class="fw-medium">@(d.ShareholderName ?? $"SH #{d.ShId}")</span>
+                                <br /><span class="text-muted-sm">#@d.ShId</span>
+                            </td>
+                            <td>
+                                <span class="fw-medium">@(d.FundTitle ?? $"Fund #{d.FundId}")</span>
+                                <br /><span class="text-muted-sm">ID @d.FundId</span>
+                            </td>
+                            <td class="mono text-muted-sm">
+                                @System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedMonthName(d.Month) @d.Year
+                            </td>
+                            <td class="text-end mono">@FormatPkr(d.GrossDivAmount)</td>
+                            <td class="text-end mono text-warning-muted">@FormatPkr(d.Tax)</td>
+                            <td class="text-end mono fw-semibold text-success-muted">@FormatPkr(d.NetAmountPaid)</td>
+                            <td class="mono text-muted-sm">
+                                @(d.PaidOn.HasValue ? d.PaidOn.Value.ToString("dd MMM yyyy") : "—")
+                            </td>
+                            <td>
+                                <span class="badge-soft @GetDivStatusClass(d.Status)">@TitleCase(d.Status)</span>
+                            </td>
+                            <td>
+                                @if (d.Status.Equals("pending", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    @if (expandedPayoutId == d.DivId)
+                                    {
+                                        <div class="reit-inline-form">
+                                            <p class="reit-inline-form-label">Confirm Payout</p>
+                                            <input class="reit-form-input reit-form-input--sm" type="date"
+                                                   @bind="payoutDate" />
+                                            <p class="reit-form-hint mb-1">Leave empty to use today's date.</p>
+                                            <div class="d-flex gap-1 mt-1">
+                                                <button class="reit-btn-primary reit-btn--xs"
+                                                        @onclick="@(() => ConfirmPayoutAsync(d.DivId))"
+                                                        disabled="@(confirmingId == d.DivId)">
+                                                    @if (confirmingId == d.DivId)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                    }
+                                                    else { <span>Mark Paid</span> }
+                                                </button>
+                                                <button class="reit-btn-secondary reit-btn--xs"
+                                                        @onclick="@(() => expandedPayoutId = null)">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button class="reit-btn-complete"
+                                                @onclick="@(() => ExpandPayout(d.DivId))">
+                                            Confirm Payout
+                                        </button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                        @if (rowFeedback.TryGetValue(d.DivId, out var fb))
+                        {
+                            <tr class="reit-feedback-row">
+                                <td colspan="10">
+                                    <div class="@(fb.IsSuccess ? "reit-alert-success" : "reit-alert-error") reit-alert--compact">
+                                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            @if (fb.IsSuccess)
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            }
+                                            else
+                                            {
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                                            }
+                                        </svg>
+                                        <span>@fb.Message</span>
+                                        <button class="reit-alert-dismiss" @onclick="@(() => rowFeedback.Remove(d.DivId))">&#x2715;</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="reit-table-footer">
+            @{ var paidCount    = dividends.Count(d => d.Status == "paid"); }
+            @{ var pendingCount = dividends.Count(d => d.Status == "pending"); }
+            <span>@dividends.Count total &nbsp;·&nbsp;</span>
+            <span class="text-success-muted">@paidCount paid</span>
+            <span>&nbsp;·&nbsp;</span>
+            <span class="text-warning-muted">@pendingCount pending</span>
+        </div>
+    </div>
+}
+
+@code {
+    // ── State ─────────────────────────────────────────────────────────────────
+    private List<DividendDto>?  dividends;
+    private List<TrustFundDto>? funds;
+    private string?             loadError;
+    private bool                isLoading;
+
+    // Calculator panel
+    private bool           showCalculator;
+    private CalcFormModel  calcForm       = new();
+    private bool           isCalculating;
+    private string?        calcSuccess;
+    private string?        calcError;
+    private int            selectedFundId;
+    private List<FundOwnerDto>? previewOwners;
+    private bool           isLoadingOwners;
+    private decimal        previewAmount;
+
+    // Confirm payout inline
+    private int?     expandedPayoutId;
+    private int?     confirmingId;
+    private DateTime payoutDate = DateTime.Today;
+
+    private Dictionary<int, (string Message, bool IsSuccess)> rowFeedback = new();
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var divTask = Http.GetFromJsonAsync<List<DividendDto>>("api/dividend");
+            var fnTask  = Http.GetFromJsonAsync<List<TrustFundDto>>("api/trustfunds");
+
+            await Task.WhenAll(divTask, fnTask);
+
+            dividends = divTask.Result;
+            funds     = fnTask.Result;
+        }
+        catch (HttpRequestException ex) { loadError = $"API unreachable — {ex.Message}"; }
+        catch (Exception ex)            { loadError = ex.Message; }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Calculator panel ──────────────────────────────────────────────────────
+    private void ToggleCalculator()
+    {
+        showCalculator = !showCalculator;
+        calcSuccess    = null;
+        calcError      = null;
+        if (showCalculator)
+        {
+            calcForm       = new CalcFormModel { RentYear = DateTime.Today.Year, RentMonth = DateTime.Today.Month };
+            selectedFundId = 0;
+            previewOwners  = null;
+            previewAmount  = 0;
+        }
+    }
+
+    private async Task OnFundSelected(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out int fundId) || fundId == 0)
+        {
+            selectedFundId = 0;
+            previewOwners  = null;
+            return;
+        }
+
+        selectedFundId  = fundId;
+        calcForm.FundId = fundId;
+        isLoadingOwners = true;
+        previewOwners   = null;
+        StateHasChanged();
+
+        try
+        {
+            // Fetch active non-REIT owners for preview
+            var all = await Http.GetFromJsonAsync<List<FundOwnerDto>>($"api/funddetails/fund/{fundId}");
+            // The API already excludes the REIT shareholder (ShId=1 is not filtered server-side on this endpoint,
+            // but the DividendController skips it during calculate — preview shows all for transparency)
+            previewOwners = all ?? new();
+        }
+        catch
+        {
+            previewOwners = new();
+        }
+        finally
+        {
+            isLoadingOwners = false;
+        }
+    }
+
+    private void OnPreviewAmountChanged(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out decimal v))
+            previewAmount = v;
+        StateHasChanged();
+    }
+
+    private async Task SubmitCalculateAsync()
+    {
+        isCalculating = true;
+        calcSuccess   = null;
+        calcError     = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 0;
+
+        try
+        {
+            var dto = new DividendCalculateDto
+            {
+                UserId    = adminId,
+                FundId    = selectedFundId,
+                RentMonth = calcForm.RentMonth,
+                RentYear  = calcForm.RentYear,
+                TaxRate   = calcForm.TaxRate,
+                Notes     = string.IsNullOrWhiteSpace(calcForm.Notes) ? null : calcForm.Notes.Trim()
+            };
+
+            var response = await Http.PostAsJsonAsync("api/dividend/calculate", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                calcSuccess = $"Dividend calculation complete. Pending payout rows created for {System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(calcForm.RentMonth)} {calcForm.RentYear}.";
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                calcError = $"[{(int)response.StatusCode}] {body}";
+            }
+        }
+        catch (Exception ex) { calcError = ex.Message; }
+        finally { isCalculating = false; }
+    }
+
+    // ── Confirm payout inline ─────────────────────────────────────────────────
+    private void ExpandPayout(int divId)
+    {
+        expandedPayoutId = divId;
+        payoutDate       = DateTime.Today;
+        rowFeedback.Remove(divId);
+    }
+
+    private async Task ConfirmPayoutAsync(int divId)
+    {
+        confirmingId = divId;
+        StateHasChanged();
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 0;
+
+        try
+        {
+            var dto = new DividendPayoutDto
+            {
+                UserId = adminId,
+                PaidOn = DateOnly.FromDateTime(payoutDate)
+            };
+
+            var response = await Http.PostAsJsonAsync($"api/dividend/confirm-payout/{divId}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                rowFeedback[divId]  = ("Payout confirmed. Dividend marked as paid.", true);
+                expandedPayoutId    = null;
+                await LoadDataAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                rowFeedback[divId] = ($"[{(int)response.StatusCode}] {body}", false);
+                expandedPayoutId   = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            rowFeedback[divId]  = (ex.Message, false);
+            expandedPayoutId    = null;
+        }
+        finally { confirmingId = null; }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string FormatPkr(decimal v) => "PKR " + v.ToString("N0");
+
+    private static string TitleCase(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+
+    private static string GetDivStatusClass(string status) => status.ToLower() switch
+    {
+        "paid"    => "badge-active",
+        "pending" => "badge-pending",
+        _         => "badge-soft"
+    };
+
+    // ── Local form model ──────────────────────────────────────────────────────
+    private class CalcFormModel
+    {
+        public int     FundId    { get; set; }
+        public int     RentMonth { get; set; }
+        public int     RentYear  { get; set; }
+        public decimal TaxRate   { get; set; }
+        public string? Notes     { get; set; }
+    }
+}

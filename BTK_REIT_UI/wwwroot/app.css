@@ -2144,3 +2144,40 @@ html, body {
     .reit-metric-grid { grid-template-columns: 1fr 1fr; }
     .reit-fund-header { flex-direction: column; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   DIVIDEND PREVIEW PANEL
+   ════════════════════════════════════════════════════════════ */
+
+.reit-preview-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem 1.25rem;
+}
+
+.reit-preview-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #334155;
+    margin: 0 0 0.75rem;
+}
+
+/* Table totals footer row */
+.reit-table-totals td {
+    background: #f1f5f9;
+    border-top: 2px solid #cbd5e1;
+    font-size: 0.85rem;
+}
+
+/* ── Inline form label (shared across pages) ── */
+.reit-inline-form-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.4rem;
+}
