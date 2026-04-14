@@ -26,6 +26,168 @@ namespace REIT_Project.Controllers
         // Cache key must match the format used in ValidationService.
         private static string CacheKey(string key) => $"config_validation:{key.ToLower().Trim()}";
 
+        // ── GET /api/Config/grouped ──────────────────────────────────────────
+        /// <summary>
+        /// Returns all configuration entries grouped by key, including inactive ones.
+        /// Each entry aggregates the CSV value into a parsed list. Used by the
+        /// Configurations management page.
+        /// </summary>
+        [HttpGet("grouped")]
+        public async Task<IActionResult> GetGrouped()
+        {
+            var all = await _context.Configurations
+                .OrderBy(c => c.Key)
+                .ThenByDescending(c => c.IsActive)
+                .ToListAsync();
+
+            var grouped = all
+                .GroupBy(c => c.Key)
+                .Select(g =>
+                {
+                    // Prefer the active row; fall back to the most-recently-edited
+                    var representative = g.FirstOrDefault(c => c.IsActive)
+                                     ?? g.OrderByDescending(c => c.LastEdited).First();
+
+                    // Merge all values from the group (handles legacy multi-row keys)
+                    var allValues = g
+                        .SelectMany(c => c.Value
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(v => v.Trim())
+                            .Where(v => v.Length > 0))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(v => v)
+                        .ToList();
+
+                    return new ConfigGroupedDto
+                    {
+                        ConfigId   = representative.ConfigId,
+                        Key        = representative.Key,
+                        Value      = string.Join(", ", allValues),
+                        Values     = allValues,
+                        IsActive   = representative.IsActive,
+                        Notes      = representative.Notes,
+                        LastEdited = representative.LastEdited,
+                        UserId     = representative.UserId
+                    };
+                })
+                .OrderBy(g => g.Key)
+                .ToList();
+
+            return Ok(grouped);
+        }
+
+        // ── PATCH /api/Config/{id}/toggle ────────────────────────────────────
+        /// <summary>
+        /// Toggles the is_active flag for a configuration row identified by its
+        /// config_id. Invalidates the ValidationService cache for that key.
+        /// </summary>
+        [HttpPatch("{id:int}/toggle")]
+        public async Task<IActionResult> ToggleActive(int id, [FromQuery] int userId)
+        {
+            if (userId <= 0)
+                return BadRequest("userId query parameter is required.");
+
+            bool adminExists = await _context.AdminUsers.AnyAsync(a => a.UserId == userId);
+            if (!adminExists)
+                return BadRequest($"AdminUser with user_id={userId} does not exist.");
+
+            var config = await _context.Configurations.FindAsync(id);
+            if (config == null)
+                return NotFound($"Configuration with id={id} not found.");
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    bool wasActive = config.IsActive;
+                    config.IsActive   = !wasActive;
+                    config.LastEdited = DateTime.UtcNow;
+                    config.UserId     = userId;
+
+                    _audit.LogAction(
+                        userId: userId,
+                        tableName: "Configurations",
+                        recordId: config.ConfigId,
+                        action: $"TOGGLE: Configuration key '{config.Key}' set IsActive={config.IsActive}.",
+                        oldInfo: $"IsActive={wasActive}");
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Invalidate cache so ValidationService picks up the change.
+                    _cache.Remove(CacheKey(config.Key));
+
+                    return Ok(new
+                    {
+                        config.ConfigId,
+                        config.Key,
+                        config.IsActive,
+                        Action  = config.IsActive ? "activated" : "deactivated",
+                        Message = $"Configuration '{config.Key}' is now {(config.IsActive ? "active" : "inactive")}."
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, $"Failed to toggle configuration: {ex.Message}");
+                }
+            });
+        }
+
+        // ── PATCH /api/Config/{id}/notes ─────────────────────────────────────
+        /// <summary>
+        /// Updates the notes field for a configuration row by its config_id.
+        /// </summary>
+        [HttpPatch("{id:int}/notes")]
+        public async Task<IActionResult> UpdateNotes(int id, [FromBody] ConfigPatchDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            bool adminExists = await _context.AdminUsers.AnyAsync(a => a.UserId == dto.UserId);
+            if (!adminExists)
+                return BadRequest($"AdminUser with user_id={dto.UserId} does not exist.");
+
+            var config = await _context.Configurations.FindAsync(id);
+            if (config == null)
+                return NotFound($"Configuration with id={id} not found.");
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    string? oldNotes = config.Notes;
+                    config.Notes      = dto.Value;
+                    config.LastEdited = DateTime.UtcNow;
+                    config.UserId     = dto.UserId;
+
+                    _audit.LogAction(
+                        userId: dto.UserId,
+                        tableName: "Configurations",
+                        recordId: config.ConfigId,
+                        action: $"UPDATE: Notes updated for key '{config.Key}'.",
+                        oldInfo: $"Notes={oldNotes}");
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return Ok(new { config.ConfigId, config.Key, config.Notes });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, $"Failed to update notes: {ex.Message}");
+                }
+            });
+        }
+
         // ── GET /api/Config ──────────────────────────────────────────────────
         /// <summary>
         /// Returns all active configuration entries. Used to feed UI dropdowns.

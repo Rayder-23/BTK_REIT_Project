@@ -93,11 +93,14 @@ else if (funds is not null)
                         </svg>
                     </div>
                     <div>
-                        <p class="reit-fund-title">@(fund.FundTitle ?? fund.FundTitle1 ?? $"Fund #{fund.FundId}")</p>
-                        @if (!string.IsNullOrWhiteSpace(fund.FundTitle) && !string.IsNullOrWhiteSpace(fund.FundTitle1))
+                        @* FundTitle1 = short/identifier name (DB: fund_title) — primary display *@
+                        <p class="reit-fund-title">@(fund.FundTitle1 ?? $"Fund #{fund.FundId}")</p>
+                        @* FundTitle = long/legal name — subtitle *@
+                        @if (!string.IsNullOrWhiteSpace(fund.FundTitle))
                         {
-                            <p class="reit-fund-subtitle">@fund.FundTitle1</p>
+                            <p class="reit-fund-subtitle">@fund.FundTitle</p>
                         }
+                        @* Notes — clean user notes only (no STATUS: prefix, stripped by API) *@
                         @if (!string.IsNullOrWhiteSpace(fund.Notes))
                         {
                             <p class="reit-fund-subtitle">@fund.Notes</p>
@@ -129,7 +132,7 @@ else if (funds is not null)
 
                 @* Right: status badge + action *@
                 <div class="reit-fund-actions">
-                    <span class="badge-soft @GetFundStatusClass(fund)">@GetFundStatus(fund)</span>
+                    <span class="badge-soft @GetStatusClass(GetFundStatus(fund))">@GetFundStatus(fund)</span>
                     <a href="trustfunds/@fund.FundId" class="reit-btn-link mt-2">
                         View Fund
                         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -166,17 +169,31 @@ else if (funds is not null)
     private static string FormatPkr(decimal value) =>
         "PKR " + value.ToString("N0");
 
+    /// <summary>
+    /// Resolves display status: uses persisted Status from config if set,
+    /// otherwise derives from StartDate.
+    /// </summary>
     private static string GetFundStatus(TrustFundDto fund)
     {
+        if (!string.IsNullOrWhiteSpace(fund.Status))
+            return char.ToUpper(fund.Status[0]) + fund.Status[1..];
         if (!fund.StartDate.HasValue) return "Pending";
         if (fund.StartDate.Value > DateTime.UtcNow) return "Scheduled";
         return "Active";
     }
 
-    private static string GetFundStatusClass(TrustFundDto fund) => GetFundStatus(fund) switch
-    {
-        "Active"    => "badge-active",
-        "Scheduled" => "badge-pending",
-        _           => "badge-inactive"
-    };
+    /// <summary>
+    /// Returns the appropriate badge CSS class for a given status string.
+    /// Works with both config-driven and derived status values.
+    /// </summary>
+    private static string GetStatusClass(string status) =>
+        status.ToLower() switch
+        {
+            "active"     => "badge-active",
+            "liquidated" => "badge-inactive",
+            "closed"     => "badge-inactive",
+            "pending"    => "badge-pending",
+            "scheduled"  => "badge-pending",
+            _            => "badge-soft"
+        };
 }

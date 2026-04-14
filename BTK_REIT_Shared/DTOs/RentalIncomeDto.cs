@@ -4,6 +4,8 @@ public class RentalIncomeDto
 {
     public int RentId { get; set; }
     public int FundId { get; set; }
+    /// <summary>Populated by GET endpoints (joined from TrustFund).</summary>
+    public string? FundTitle { get; set; }
     public int RentMonth { get; set; }
     public int RentYear { get; set; }
     public DateOnly DueDate { get; set; }

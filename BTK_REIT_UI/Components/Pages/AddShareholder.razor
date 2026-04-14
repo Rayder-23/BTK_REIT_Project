@@ -242,7 +242,13 @@
         <div class="reit-form-grid reit-form-grid--3">
             <div class="reit-form-field">
                 <label class="reit-form-label">Bank Name <span class="reit-required">*</span></label>
-                <InputText @bind-Value="bank.Bank" class="reit-form-input" placeholder="e.g. HBL, MCB, UBL" />
+                <InputSelect @bind-Value="bank.Bank" class="reit-form-select">
+                    <option value="">— Select bank —</option>
+                    @foreach (var b in banks)
+                    {
+                        <option value="@b">@b</option>
+                    }
+                </InputSelect>
                 <ValidationMessage For="() => bank.Bank" class="reit-form-validation" />
             </div>
 
@@ -305,8 +311,29 @@
     private string? errorMessage;
     private RegisterResult? successResult;
     private SubmitStep submitStep;
+    private List<string> banks = new();
 
     private enum SubmitStep { Idle, CreatingShareholder, LinkingBank }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var configs = await Http.GetFromJsonAsync<List<ConfigurationDto>>("api/config");
+            var entry = configs?.FirstOrDefault(c =>
+                string.Equals(c.Key, "banks", StringComparison.OrdinalIgnoreCase));
+
+            if (entry is not null)
+            {
+                banks = entry.Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+            }
+        }
+        catch { /* fall back to empty list — dropdown shows no options */ }
+    }
 
     // ── KYC requirement logic ─────────────────────────────────────────────────
     // Individual (default):              CNIC required

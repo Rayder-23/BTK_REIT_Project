@@ -1,0 +1,471 @@
+@page "/configurations"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+
+<PageTitle>Configurations — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Configurations</h1>
+        <p class="reit-page-subtitle">System DNA — validation rules and dropdown values</p>
+    </div>
+    @if (configs is not null)
+    {
+        <span class="reit-count-pill">
+            <span class="reit-count-dot"></span>
+            @configs.Count key@(configs.Count == 1 ? "" : "s")
+        </span>
+    }
+</div>
+
+@* ── Toast ── *@
+@if (toast is not null)
+{
+    <div class="reit-toast @(toast.IsSuccess ? "reit-toast--success" : "reit-toast--error")">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            @if (toast.IsSuccess)
+            {
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            }
+            else
+            {
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+            }
+        </svg>
+        <span>@toast.Message</span>
+        <button class="reit-alert-dismiss" @onclick="() => toast = null">&#x2715;</button>
+    </div>
+}
+
+@* ── Error state ── *@
+@if (loadError is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load configurations</p>
+            <p class="mb-0">@loadError</p>
+        </div>
+    </div>
+}
+
+@* ── Loading state ── *@
+@if (configs is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading configurations&hellip;</p>
+        </div>
+    </div>
+}
+
+@* ── Config table ── *@
+else if (configs is not null)
+{
+    <div class="reit-card">
+        <div class="reit-table-wrap">
+            <table class="reit-table table-borderless">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Key</th>
+                        <th>Values</th>
+                        <th>Notes</th>
+                        <th>Last Edited</th>
+                        <th>Active</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var cfg in configs)
+                    {
+                        <tr class="@(cfg.IsActive ? "" : "reit-row--inactive")">
+                            <td class="mono text-muted-sm">@cfg.ConfigId</td>
+                            <td>
+                                <span class="fw-semibold mono">@cfg.Key</span>
+                            </td>
+                            <td>
+                                <div class="reit-config-values">
+                                    @foreach (var v in cfg.Values)
+                                    {
+                                        <span class="badge-soft badge-inactive">@v</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-muted-sm">@(cfg.Notes ?? "—")</td>
+                            <td class="mono text-muted-sm">@cfg.LastEdited.ToShortDateString()</td>
+                            <td>
+                                @* Bootstrap toggle switch *@
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input reit-config-toggle"
+                                           type="checkbox"
+                                           role="switch"
+                                           checked="@cfg.IsActive"
+                                           disabled="@(togglingId == cfg.ConfigId)"
+                                           @onchange="@(async e => await ToggleActiveAsync(cfg, (bool)e.Value!))" />
+                                </div>
+                            </td>
+                            <td>
+                                <button class="reit-btn reit-btn--ghost reit-btn--sm"
+                                        @onclick="() => OpenEdit(cfg)">
+                                    Edit
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   EDIT MODAL
+   ════════════════════════════════════════════════════════════ *@
+@if (editTarget is not null)
+{
+    <div class="reit-modal-backdrop" @onclick="CloseEdit">
+        <div class="reit-modal shadow-sm" @onclick:stopPropagation="true">
+
+            <div class="reit-modal-header">
+                <div>
+                    <p class="reit-modal-title">Edit — <span class="mono">@editTarget.Key</span></p>
+                    <p class="reit-modal-sub">Add or remove values, and update the notes for this key.</p>
+                </div>
+                <button class="reit-modal-close" @onclick="CloseEdit">&#x2715;</button>
+            </div>
+
+            @* Error inside modal *@
+            @if (editError is not null)
+            {
+                <div class="reit-alert-error mb-3">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                    </svg>
+                    <span>@editError</span>
+                    <button class="reit-alert-dismiss" @onclick="() => editError = null">&#x2715;</button>
+                </div>
+            }
+
+            @* Current values with remove buttons *@
+            <div class="mb-3">
+                <p class="reit-form-label mb-2">Current Values</p>
+                @if (editValues.Count == 0)
+                {
+                    <p class="text-muted-sm">No values. Add one below.</p>
+                }
+                else
+                {
+                    <div class="reit-config-values">
+                        @foreach (var v in editValues)
+                        {
+                            <span class="reit-config-value-chip">
+                                @v
+                                <button class="reit-chip-remove"
+                                        @onclick="() => RemoveValueAsync(v)"
+                                        disabled="@(removingValue == v || editValues.Count <= 1)"
+                                        title="@(editValues.Count <= 1 ? "Cannot remove — must have at least one value" : "Remove")">
+                                    &#x2715;
+                                </button>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Add new value *@
+            <div class="mb-3">
+                <p class="reit-form-label mb-2">Add New Value</p>
+                <div class="d-flex gap-2">
+                    <input class="reit-form-input flex-grow-1"
+                           type="text"
+                           placeholder="e.g. Faysal Bank"
+                           @bind="newValue"
+                           @bind:event="oninput"
+                           @onkeydown="OnNewValueKeyDown" />
+                    <button class="reit-btn reit-btn--primary reit-btn--sm"
+                            @onclick="AddValueAsync"
+                            disabled="@(string.IsNullOrWhiteSpace(newValue) || isAddingValue)">
+                        @if (isAddingValue)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <span>Add</span>
+                        }
+                    </button>
+                </div>
+            </div>
+
+            @* Notes *@
+            <div class="mb-4">
+                <p class="reit-form-label mb-2">Notes</p>
+                <div class="d-flex gap-2">
+                    <textarea class="reit-form-input flex-grow-1 reit-form-textarea"
+                              rows="2"
+                              placeholder="Optional admin notes for this config key…"
+                              @bind="editNotes"></textarea>
+                    <button class="reit-btn reit-btn--ghost reit-btn--sm align-self-end"
+                            @onclick="SaveNotesAsync"
+                            disabled="@isSavingNotes">
+                        @if (isSavingNotes)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <span>Save</span>
+                        }
+                    </button>
+                </div>
+            </div>
+
+            <div class="reit-modal-footer">
+                <button class="reit-btn reit-btn--ghost" @onclick="CloseEdit">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // ── State ────────────────────────────────────────────────────────────────
+    private List<ConfigGroupedDto>? configs;
+    private string?                 loadError;
+
+    // Toast
+    private ToastMessage? toast;
+
+    // Toggle
+    private int? togglingId;
+
+    // Edit modal
+    private ConfigGroupedDto? editTarget;
+    private List<string>      editValues   = new();
+    private string?           editNotes;
+    private string            newValue     = string.Empty;
+    private bool              isAddingValue;
+    private string?           removingValue;
+    private bool              isSavingNotes;
+    private string?           editError;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+        configs   = null;
+
+        try
+        {
+            configs = await Http.GetFromJsonAsync<List<ConfigGroupedDto>>("api/config/grouped");
+        }
+        catch (HttpRequestException ex) { loadError = $"API unreachable — {ex.Message}"; }
+        catch (Exception ex)            { loadError = ex.Message; }
+    }
+
+    // ── Toggle is_active ──────────────────────────────────────────────────────
+    private async Task ToggleActiveAsync(ConfigGroupedDto cfg, bool newValue)
+    {
+        togglingId = cfg.ConfigId;
+        editError  = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 1;
+
+        try
+        {
+            var response = await Http.PatchAsync(
+                $"api/config/{cfg.ConfigId}/toggle?userId={adminId}",
+                null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                cfg.IsActive = newValue;
+                ShowToast($"'{cfg.Key}' has been {(newValue ? "activated" : "deactivated")}.", true);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                ShowToast($"Toggle failed — {body}", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error — {ex.Message}", false);
+        }
+        finally
+        {
+            togglingId = null;
+        }
+    }
+
+    // ── Edit modal ────────────────────────────────────────────────────────────
+    private void OpenEdit(ConfigGroupedDto cfg)
+    {
+        editTarget    = cfg;
+        editValues    = cfg.Values.ToList();
+        editNotes     = cfg.Notes;
+        newValue      = string.Empty;
+        editError     = null;
+    }
+
+    private void CloseEdit()
+    {
+        editTarget = null;
+        editError  = null;
+    }
+
+    private async Task OnNewValueKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newValue))
+            await AddValueAsync();
+    }
+
+    private async Task AddValueAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newValue) || editTarget is null) return;
+
+        isAddingValue = true;
+        editError     = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 1;
+
+        try
+        {
+            var dto      = new ConfigPatchDto { Value = newValue.Trim(), UserId = adminId };
+            var response = await Http.PatchAsJsonAsync(
+                $"api/config/append/{editTarget.Key}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var token = newValue.Trim();
+                if (!editValues.Any(v => string.Equals(v, token, StringComparison.OrdinalIgnoreCase)))
+                    editValues.Add(token);
+
+                // Sync back to the table row
+                editTarget.Values = editValues.ToList();
+                editTarget.Value  = string.Join(", ", editValues);
+
+                newValue = string.Empty;
+                ShowToast($"'{token}' added to '{editTarget.Key}'.", true);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                editError = $"Could not add value — {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            editError = ex.Message;
+        }
+        finally
+        {
+            isAddingValue = false;
+        }
+    }
+
+    private async Task RemoveValueAsync(string value)
+    {
+        if (editTarget is null || editValues.Count <= 1) return;
+
+        removingValue = value;
+        editError     = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 1;
+
+        try
+        {
+            var dto      = new ConfigPatchDto { Value = value, UserId = adminId };
+            var response = await Http.PatchAsJsonAsync(
+                $"api/config/remove/{editTarget.Key}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                editValues.RemoveAll(v =>
+                    string.Equals(v, value, StringComparison.OrdinalIgnoreCase));
+
+                editTarget.Values = editValues.ToList();
+                editTarget.Value  = string.Join(", ", editValues);
+
+                ShowToast($"'{value}' removed from '{editTarget.Key}'.", true);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                editError = $"Could not remove value — {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            editError = ex.Message;
+        }
+        finally
+        {
+            removingValue = null;
+        }
+    }
+
+    private async Task SaveNotesAsync()
+    {
+        if (editTarget is null) return;
+
+        isSavingNotes = true;
+        editError     = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 1;
+
+        try
+        {
+            var dto      = new ConfigPatchDto { Value = editNotes ?? string.Empty, UserId = adminId };
+            var response = await Http.PatchAsJsonAsync(
+                $"api/config/{editTarget.ConfigId}/notes", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                editTarget.Notes = editNotes;
+                ShowToast($"Notes saved for '{editTarget.Key}'.", true);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                editError = $"Could not save notes — {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            editError = ex.Message;
+        }
+        finally
+        {
+            isSavingNotes = false;
+        }
+    }
+
+    // ── Toast helpers ─────────────────────────────────────────────────────────
+    private void ShowToast(string message, bool success)
+    {
+        toast = new ToastMessage(message, success);
+        // Auto-dismiss after 4 s via a fire-and-forget task
+        _ = DismissToastAfterDelay();
+    }
+
+    private async Task DismissToastAfterDelay()
+    {
+        await Task.Delay(4000);
+        toast = null;
+        StateHasChanged();
+    }
+
+    private record ToastMessage(string Message, bool IsSuccess);
+}

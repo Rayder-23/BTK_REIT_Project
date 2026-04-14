@@ -1,0 +1,556 @@
+@page "/trustfunds/{Id:int}"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@inject NavigationManager Nav
+@using BTK_REIT_Shared.DTOs
+@using System.Net.Http.Json
+
+<PageTitle>Fund Detail — BTK REIT</PageTitle>
+
+@* ── Toast ── *@
+@if (toast is not null)
+{
+    <div class="reit-toast @(toast.IsSuccess ? "reit-toast--success" : "reit-toast--error")">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            @if (toast.IsSuccess)
+            {
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            }
+            else
+            {
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+            }
+        </svg>
+        <span>@toast.Message</span>
+        <button class="reit-alert-dismiss" @onclick="() => toast = null">&#x2715;</button>
+    </div>
+}
+
+@* ── Loading ── *@
+@if (isLoading)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mb-0">Loading fund data&hellip;</p>
+        </div>
+    </div>
+}
+@* ── Load error ── *@
+else if (loadError is not null)
+{
+    <div class="reit-error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-error-title">Could not load fund</p>
+            <p class="mb-0">@loadError</p>
+        </div>
+    </div>
+}
+@* ── Main content ── *@
+else if (fund is not null)
+{
+    @* ── Page header ── *@
+    <div class="reit-page-header">
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            <a href="trustfunds" class="reit-back-link" title="Back to Trust Funds">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
+                </svg>
+            </a>
+            <div>
+                @* FundTitle1 = short/identifier name — primary header *@
+                <h1 class="reit-page-title">@(fund.FundTitle1 ?? $"Fund #{fund.FundId}")</h1>
+                @* FundTitle = long/legal name — subtitle *@
+                @if (!string.IsNullOrWhiteSpace(fund.FundTitle))
+                {
+                    <p class="reit-page-subtitle">@fund.FundTitle</p>
+                }
+                else
+                {
+                    <p class="reit-page-subtitle">Fund #@fund.FundId &mdash; Property #@fund.PropId</p>
+                }
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.65rem;">
+            <span class="badge-soft @GetStatusClass(DerivedStatus)">@DerivedStatus</span>
+            <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => showEditPanel = !showEditPanel">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:14px;height:14px">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+                </svg>
+                Edit
+            </button>
+        </div>
+    </div>
+
+    @* ── Edit panel ── *@
+    @if (showEditPanel)
+    {
+        <div class="reit-edit-panel mb-4">
+            <p class="reit-edit-panel-title">Edit Fund Details</p>
+
+            @if (editError is not null)
+            {
+                <div class="reit-alert-error mb-3" style="font-size:0.8rem; display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.75rem; border-radius:6px;">
+                    <span>@editError</span>
+                    <button class="reit-alert-dismiss" @onclick="() => editError = null">&#x2715;</button>
+                </div>
+            }
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                <div class="reit-form-field">
+                    <label class="reit-form-label">
+                        Display Name <span style="color:#94a3b8; font-weight:400; text-transform:none;">(Short identifier)</span>
+                    </label>
+                    <input class="reit-form-input" type="text"
+                           @bind="editShortName"
+                           placeholder="e.g. Clifton-Tower-01" />
+                    <span class="reit-form-hint">Stored as <code>fund_title</code> — used in tables &amp; nav</span>
+                </div>
+                <div class="reit-form-field">
+                    <label class="reit-form-label">
+                        Full Legal Name <span style="color:#94a3b8; font-weight:400; text-transform:none;">(Long)</span>
+                    </label>
+                    <input class="reit-form-input" type="text"
+                           @bind="editLongName"
+                           placeholder="e.g. Clifton Tower Premium Investment Fund" />
+                    <span class="reit-form-hint">Stored as <code>FundTitle</code> — shown in detail &amp; legal docs</span>
+                </div>
+                <div class="reit-form-field">
+                    <label class="reit-form-label">Total Fund Value (PKR)</label>
+                    <input class="reit-form-input" type="number" step="1" min="0" @bind="editValue" />
+                </div>
+                <div class="reit-form-field">
+                    <label class="reit-form-label">Status</label>
+                    @if (fundStatuses.Count > 0)
+                    {
+                        <select class="reit-form-select" @bind="editStatus">
+                            <option value="">— No change —</option>
+                            @foreach (var s in fundStatuses)
+                            {
+                                <option value="@s">@(char.ToUpper(s[0]) + s[1..])</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="reit-form-input" disabled value="Loading config…" />
+                    }
+                </div>
+            </div>
+
+            <div style="display:flex; gap:0.65rem; justify-content:flex-end;">
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => { showEditPanel = false; editError = null; }">Cancel</button>
+                <button class="reit-btn reit-btn--primary reit-btn--sm"
+                        @onclick="SaveEditAsync"
+                        disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    }
+                    else
+                    {
+                        <span>Save Changes</span>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+
+    @* ── Metric cards ── *@
+    <div class="reit-metric-grid">
+        <div class="reit-metric-card reit-metric-card--accent">
+            <span class="reit-metric-label">Total Fund Value</span>
+            <span class="reit-metric-value mono">@FormatPkr(fund.FundTotalValue)</span>
+            <span class="reit-metric-sub">Declared valuation</span>
+        </div>
+        <div class="reit-metric-card">
+            <span class="reit-metric-label">Property Value</span>
+            @if (property is not null)
+            {
+                <span class="reit-metric-value mono">@FormatPkr(property.CurrentValue ?? property.PurchasePrice)</span>
+                <span class="reit-metric-sub">@property.PropName</span>
+            }
+            else
+            {
+                <span class="reit-metric-value text-muted">—</span>
+                <span class="reit-metric-sub">Property #@fund.PropId</span>
+            }
+        </div>
+        <div class="reit-metric-card">
+            <span class="reit-metric-label">Shareholders</span>
+            <span class="reit-metric-value">@(capTable?.Count ?? 0)</span>
+            <span class="reit-metric-sub">Active ownership records</span>
+        </div>
+    </div>
+
+    @* ── Property info card ── *@
+    @if (property is not null)
+    {
+        <div class="reit-profile-card mb-4">
+            <div class="reit-profile-card-header">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"/>
+                </svg>
+                Linked Property
+            </div>
+            <div class="reit-profile-rows">
+                <div class="reit-profile-row">
+                    <span class="reit-profile-row-label">Name</span>
+                    <span class="reit-profile-row-value">@property.PropName</span>
+                </div>
+                <div class="reit-profile-row">
+                    <span class="reit-profile-row-label">Type</span>
+                    <span class="reit-profile-row-value">@property.PropType</span>
+                </div>
+                <div class="reit-profile-row">
+                    <span class="reit-profile-row-label">Location</span>
+                    <span class="reit-profile-row-value">@property.City@(property.ProvinceState is not null ? ", " + property.ProvinceState : ""), @property.Country</span>
+                </div>
+                <div class="reit-profile-row">
+                    <span class="reit-profile-row-label">Purchase Price</span>
+                    <span class="reit-profile-row-value mono">@FormatPkr(property.PurchasePrice)</span>
+                </div>
+                @if (property.CurrentValue.HasValue)
+                {
+                    <div class="reit-profile-row">
+                        <span class="reit-profile-row-label">Current Value</span>
+                        <span class="reit-profile-row-value mono">@FormatPkr(property.CurrentValue.Value)</span>
+                    </div>
+                }
+                <div class="reit-profile-row">
+                    <span class="reit-profile-row-label">Status</span>
+                    <span class="reit-profile-row-value">@property.Status</span>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Cap table / Shareholder Ledger ── *@
+    <div class="reit-card">
+        <div class="reit-profile-card-header" style="padding:0.85rem 1.1rem; background:#f8fafc; border-bottom:1px solid #e2e8f0; border-radius:0;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+            </svg>
+            Shareholder Ledger (Cap Table)
+        </div>
+
+        @if (capTable is null)
+        {
+            <div class="reit-loading" style="padding:2rem;">
+                <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status"></div>
+                <p class="mb-0">Loading ownership records&hellip;</p>
+            </div>
+        }
+        else if (capTable.Count == 0)
+        {
+            <div class="reit-empty" style="padding:2rem;">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07"/>
+                </svg>
+                <p class="reit-empty-title">No Ownership Records Found</p>
+                <p class="reit-empty-sub">This fund has no active shareholders on the cap table.</p>
+                <a href="transfers" class="reit-btn reit-btn--primary reit-btn--sm mt-2">Initiate Transfer</a>
+            </div>
+        }
+        else
+        {
+            <div class="reit-table-wrap">
+                <table class="reit-table table-borderless">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Shareholder</th>
+                            <th>% Owned</th>
+                            <th>Ownership Bar</th>
+                            <th>Share Value</th>
+                            <th>Acquired</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (owner, index) in capTable.Select((o, i) => (o, i + 1)))
+                        {
+                            <tr>
+                                <td class="mono text-muted-sm">@index</td>
+                                <td>
+                                    <span class="fw-semibold">@owner.FullName</span>
+                                    <br/>
+                                    <span class="text-muted-sm mono">SH-@owner.ShId</span>
+                                </td>
+                                <td class="mono fw-semibold">@owner.PctOwned.ToString("0.##")%</td>
+                                <td style="min-width:120px; max-width:180px;">
+                                    <div class="reit-ledger-bar">
+                                        <div class="reit-ledger-fill" style="width:@(owner.PctOwned.ToString("0.##"))%"></div>
+                                    </div>
+                                </td>
+                                <td class="mono">@FormatPkr(owner.ShareValue)</td>
+                                <td class="mono text-muted-sm">@owner.AcquiredDate.ToString("dd MMM yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0;">
+                            <td colspan="2" class="fw-semibold" style="padding-top:0.6rem;">Total</td>
+                            <td class="mono fw-semibold" style="padding-top:0.6rem;">@capTable.Sum(o => o.PctOwned).ToString("0.##")%</td>
+                            <td></td>
+                            <td class="mono fw-semibold" style="padding-top:0.6rem;">@FormatPkr(capTable.Sum(o => o.ShareValue))</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@* ════════════════════════════════════════════════════════════
+   LIQUIDATION WARNING MODAL
+   ════════════════════════════════════════════════════════════ *@
+@if (showLiquidationWarning)
+{
+    <div class="reit-modal-backdrop" @onclick="() => showLiquidationWarning = false">
+        <div class="reit-modal reit-modal--warning shadow" @onclick:stopPropagation="true">
+            <div class="reit-modal-header">
+                <div class="reit-modal-icon reit-modal-icon--danger">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="reit-modal-title">Liquidation Warning</p>
+                    <p class="reit-modal-sub">This action marks the fund as liquidated and cannot be easily reversed.</p>
+                </div>
+                <button class="reit-modal-close" @onclick="() => showLiquidationWarning = false">&#x2715;</button>
+            </div>
+            <div class="reit-modal-body">
+                <p>Setting the status to <strong>Liquidated</strong> indicates the fund has been wound down. All active shareholder positions should be settled before proceeding.</p>
+                <p class="mb-0" style="color:#dc2626; font-weight:600;">Are you sure you want to continue?</p>
+            </div>
+            <div class="reit-modal-footer">
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => showLiquidationWarning = false">Cancel</button>
+                <button class="reit-btn reit-btn--danger reit-btn--sm"
+                        @onclick="ConfirmLiquidationAsync"
+                        disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    }
+                    else
+                    {
+                        <span>Yes, Liquidate Fund</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // ── Data ──────────────────────────────────────────────────────────────────
+    private TrustFundDto?       fund;
+    private PropertyDto?        property;
+    private List<FundOwnerDto>? capTable;
+    private List<string>        fundStatuses = new();
+
+    // ── Page state ────────────────────────────────────────────────────────────
+    private bool    isLoading  = true;
+    private string? loadError;
+
+    // ── Edit panel ────────────────────────────────────────────────────────────
+    private bool    showEditPanel;
+    private string  editShortName = string.Empty;   // → FundTitle1 (DB: fund_title)
+    private string  editLongName  = string.Empty;   // → FundTitle  (DB: FundTitle)
+    private decimal editValue;
+    private string  editStatus    = string.Empty;
+    private bool    isSaving;
+    private string? editError;
+
+    // ── Liquidation modal ─────────────────────────────────────────────────────
+    private bool showLiquidationWarning;
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    private ToastMessage? toast;
+
+    // ── Derived status ────────────────────────────────────────────────────────
+    /// <summary>
+    /// Resolves the display status: uses persisted Status (from config) if set,
+    /// then falls back to StartDate derivation. Always title-cased.
+    /// </summary>
+    private string DerivedStatus
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(fund?.Status))
+                return char.ToUpper(fund.Status[0]) + fund.Status[1..];
+            if (fund?.StartDate is null) return "Pending";
+            if (fund.StartDate.Value > DateTime.UtcNow) return "Scheduled";
+            return "Active";
+        }
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadAllAsync();
+
+    private async Task LoadAllAsync()
+    {
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            // Fetch fund first to get prop_id
+            fund = await Http.GetFromJsonAsync<TrustFundDto>($"api/trustfunds/{Id}");
+            if (fund is null)
+            {
+                loadError = $"Fund #{Id} not found.";
+                return;
+            }
+
+            // Parallel: property + cap table + config
+            var propTask   = Http.GetFromJsonAsync<PropertyDto>($"api/properties/{fund.PropId}");
+            var tableTask  = Http.GetFromJsonAsync<List<FundOwnerDto>>($"api/funddetails/fund/{Id}");
+            var cfgTask    = Http.GetFromJsonAsync<List<ConfigurationDto>>("api/config");
+
+            await Task.WhenAll(propTask, tableTask, cfgTask);
+
+            property = propTask.Result;
+            capTable = tableTask.Result;
+
+            var statusEntry = cfgTask.Result?.FirstOrDefault(c =>
+                string.Equals(c.Key, "fund_status", StringComparison.OrdinalIgnoreCase));
+            if (statusEntry is not null)
+            {
+                fundStatuses = statusEntry.Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+            }
+
+            // Seed edit fields — FundTitle1 = short name, FundTitle = long name
+            editShortName = fund.FundTitle1 ?? string.Empty;
+            editLongName  = fund.FundTitle  ?? string.Empty;
+            editValue     = fund.FundTotalValue;
+            editStatus    = fund.Status ?? string.Empty;
+        }
+        catch (HttpRequestException ex) { loadError = $"API unreachable — {ex.Message}"; }
+        catch (Exception ex)            { loadError = ex.Message; }
+        finally                         { isLoading = false; }
+    }
+
+    // ── Edit save ─────────────────────────────────────────────────────────────
+    private async Task SaveEditAsync()
+    {
+        if (fund is null) return;
+
+        // Liquidation gate
+        if (string.Equals(editStatus, "liquidated", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(DerivedStatus, "liquidated", StringComparison.OrdinalIgnoreCase))
+        {
+            showLiquidationWarning = true;
+            return;
+        }
+
+        await CommitEditAsync();
+    }
+
+    private async Task ConfirmLiquidationAsync()
+    {
+        showLiquidationWarning = false;
+        await CommitEditAsync();
+    }
+
+    private async Task CommitEditAsync()
+    {
+        if (fund is null) return;
+
+        isSaving  = true;
+        editError = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 1;
+
+        try
+        {
+            var dto = new PatchTrustFundDto
+            {
+                UserId         = adminId,
+                // FundTitle1 = short/identifier name (DB: fund_title)
+                FundTitle1     = string.IsNullOrWhiteSpace(editShortName) ? null : editShortName.Trim(),
+                // FundTitle  = long/legal name (DB: FundTitle)
+                FundTitle      = string.IsNullOrWhiteSpace(editLongName)  ? null : editLongName.Trim(),
+                FundTotalValue = editValue > 0 ? editValue : null,
+                Status         = string.IsNullOrWhiteSpace(editStatus) ? null : editStatus.Trim()
+            };
+
+            var response = await Http.PatchAsJsonAsync($"api/trustfunds/{Id}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var updated = await response.Content.ReadFromJsonAsync<TrustFundDto>();
+                if (updated is not null)
+                {
+                    fund.FundTitle      = updated.FundTitle;   // long/legal name
+                    fund.FundTitle1     = updated.FundTitle1;  // short/identifier name
+                    fund.FundTotalValue = updated.FundTotalValue;
+                    fund.Status         = updated.Status;
+                    fund.Notes          = updated.Notes;
+                }
+                showEditPanel = false;
+                ShowToast("Fund details updated successfully.", true);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                editError = $"Save failed — {body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            editError = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string FormatPkr(decimal value) => "PKR " + value.ToString("N0");
+
+    /// <summary>
+    /// Returns the appropriate badge CSS class for a given status string.
+    /// Matches config-driven values from the 'fund_status' key.
+    /// </summary>
+    private static string GetStatusClass(string status) =>
+        status.ToLower() switch
+        {
+            "active"     => "badge-active",
+            "liquidated" => "badge-inactive",
+            "closed"     => "badge-inactive",
+            "pending"    => "badge-pending",
+            "scheduled"  => "badge-pending",
+            _            => "badge-soft"
+        };
+
+    private void ShowToast(string message, bool success)
+    {
+        toast = new ToastMessage(message, success);
+        _ = DismissToastAfterDelay();
+    }
+
+    private async Task DismissToastAfterDelay()
+    {
+        await Task.Delay(4000);
+        toast = null;
+        StateHasChanged();
+    }
+
+    private record ToastMessage(string Message, bool IsSuccess);
+}

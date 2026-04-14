@@ -10,4 +10,7 @@ public class TrustFundDto
     public string? FundTitle { get; set; }
     public string? FundTitle1 { get; set; }
     public DateOnly CreationDate { get; set; }
+
+    /// <summary>Derived or persisted fund status (e.g. active, pending, liquidated).</summary>
+    public string? Status { get; set; }
 }

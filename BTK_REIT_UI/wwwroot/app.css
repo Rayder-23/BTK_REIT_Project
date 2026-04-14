@@ -1862,3 +1862,285 @@ html, body {
     letter-spacing: 0.04em;
     vertical-align: middle;
 }
+
+/* ════════════════════════════════════════════════════════════
+   SOFT TOAST NOTIFICATION
+   ════════════════════════════════════════════════════════════ */
+
+.reit-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    animation: reit-toast-in 0.2s ease;
+    max-width: 380px;
+}
+
+.reit-toast svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.reit-toast--success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+}
+
+.reit-toast--error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
+@keyframes reit-toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   MODAL
+   ════════════════════════════════════════════════════════════ */
+
+.reit-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.45);
+    z-index: 8000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.reit-modal {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 520px;
+    padding: 1.5rem;
+    position: relative;
+}
+
+.reit-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.reit-modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0 0 0.2rem;
+}
+
+.reit-modal-sub {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.reit-modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #94a3b8;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.reit-modal-close:hover { color: #0f172a; }
+
+.reit-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f1f5f9;
+    margin-top: 0.5rem;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONFIGURATION PAGE SPECIFICS
+   ════════════════════════════════════════════════════════════ */
+
+/* Value chips container */
+.reit-config-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+/* Removable chip (inside modal) */
+.reit-config-value-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem 0.2rem 0.65rem;
+    background: #f1f5f9;
+    color: #334155;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.reit-chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    padding: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.reit-chip-remove:hover:not(:disabled) { color: #ef4444; }
+.reit-chip-remove:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Inactive row dimming */
+.reit-row--inactive td { opacity: 0.45; }
+
+/* Bootstrap switch accent */
+.reit-config-toggle { cursor: pointer; }
+.reit-config-toggle:checked { background-color: #6366f1; border-color: #6366f1; }
+
+/* ════════════════════════════════════════════════════════════
+   TRUST FUND DETAIL PAGE
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Metric card grid ───────────────────────────────────────── */
+.reit-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.reit-metric-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reit-metric-card--accent {
+    border-left: 3px solid #f59e0b;
+}
+
+.reit-metric-label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.reit-metric-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.reit-metric-sub {
+    font-size: 0.72rem;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* ── Cap-table ledger ───────────────────────────────────────── */
+.reit-ledger-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f1f5f9;
+    margin-top: 4px;
+}
+
+.reit-ledger-fill {
+    background: #f59e0b;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* ── Fund header strip ──────────────────────────────────────── */
+.reit-fund-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.reit-fund-header-identity h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+}
+
+.reit-fund-header-identity p {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.reit-fund-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-shrink: 0;
+}
+
+/* ── Warning modal (liquidation) ────────────────────────────── */
+.reit-modal--warning .reit-modal-icon {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+/* ── Edit panel ─────────────────────────────────────────────── */
+.reit-edit-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.reit-edit-panel-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 1rem;
+}
+
+@media (max-width: 768px) {
+    .reit-metric-grid { grid-template-columns: 1fr 1fr; }
+    .reit-fund-header { flex-direction: column; }
+}

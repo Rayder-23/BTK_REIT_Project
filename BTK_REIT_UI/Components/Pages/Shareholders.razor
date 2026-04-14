@@ -1,6 +1,7 @@
 @page "/shareholders"
 @rendermode InteractiveServer
 @inject HttpClient Http
+@inject NavigationManager Nav
 @using BTK_REIT_Shared.DTOs
 
 <PageTitle>Shareholders — BTK REIT</PageTitle>
@@ -63,6 +64,7 @@ else if (shareholders is not null)
                         <th>CNIC</th>
                         <th>Status</th>
                         <th>Since</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -82,6 +84,12 @@ else if (shareholders is not null)
                                 <span class="badge-soft @GetStatusBadgeClass(sh.Status)">@sh.Status</span>
                             </td>
                             <td class="mono text-muted-sm">@sh.CreationDate.ToShortDateString()</td>
+                            <td>
+                                <button class="reit-btn reit-btn--ghost reit-btn--sm"
+                                        @onclick="() => GoToDetail(sh.ShId)">
+                                    View / Edit
+                                </button>
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -110,11 +118,14 @@ else if (shareholders is not null)
         }
     }
 
+    private void GoToDetail(int id) => Nav.NavigateTo($"/shareholders/{id}");
+
     private static string GetStatusBadgeClass(string status) => status.ToLower() switch
     {
         "active"    => "badge-active",
         "pending"   => "badge-pending",
         "suspended" => "badge-suspended",
+        "inactive"  => "badge-inactive",
         _           => "badge-inactive"
     };
 }

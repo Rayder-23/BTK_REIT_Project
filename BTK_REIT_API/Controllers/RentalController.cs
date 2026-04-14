@@ -20,6 +20,68 @@ namespace REIT_Project.Controllers
             _audit = audit;
         }
 
+        // ── GET /api/rental ──────────────────────────────────────────────────
+        /// <summary>Returns all rental income records ordered most-recent first.</summary>
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<RentalIncomeDto>>> GetAll()
+        {
+            var records = await _context.RentalIncomes
+                .AsNoTracking()
+                .Include(r => r.Fund)
+                .OrderByDescending(r => r.RentYear)
+                .ThenByDescending(r => r.RentMonth)
+                .ThenByDescending(r => r.RentId)
+                .Select(r => new RentalIncomeDto
+                {
+                    RentId      = r.RentId,
+                    FundId      = r.FundId,
+                    FundTitle   = r.Fund.FundTitle1 ?? r.Fund.FundTitle ?? $"Fund #{r.FundId}",
+                    RentMonth   = r.RentMonth,
+                    RentYear    = r.RentYear,
+                    DueDate     = r.DueDate,
+                    AmountDue   = r.AmountDue,
+                    AmountPaid  = r.AmountPaid,
+                    LateFee     = r.LateFee,
+                    PaymentDate = r.PaymentDate,
+                    Status      = r.Status,
+                    Notes       = r.Notes
+                })
+                .ToListAsync();
+
+            return Ok(records);
+        }
+
+        // ── GET /api/rental/fund/{fundId} ────────────────────────────────────
+        /// <summary>Returns all rental income records for a specific fund.</summary>
+        [HttpGet("fund/{fundId:int}")]
+        public async Task<ActionResult<IEnumerable<RentalIncomeDto>>> GetByFund(int fundId)
+        {
+            var records = await _context.RentalIncomes
+                .AsNoTracking()
+                .Include(r => r.Fund)
+                .Where(r => r.FundId == fundId)
+                .OrderByDescending(r => r.RentYear)
+                .ThenByDescending(r => r.RentMonth)
+                .Select(r => new RentalIncomeDto
+                {
+                    RentId      = r.RentId,
+                    FundId      = r.FundId,
+                    FundTitle   = r.Fund.FundTitle1 ?? r.Fund.FundTitle ?? $"Fund #{r.FundId}",
+                    RentMonth   = r.RentMonth,
+                    RentYear    = r.RentYear,
+                    DueDate     = r.DueDate,
+                    AmountDue   = r.AmountDue,
+                    AmountPaid  = r.AmountPaid,
+                    LateFee     = r.LateFee,
+                    PaymentDate = r.PaymentDate,
+                    Status      = r.Status,
+                    Notes       = r.Notes
+                })
+                .ToListAsync();
+
+            return Ok(records);
+        }
+
         // ── POST /api/Rental/record ──────────────────────────────────────────
         /// <summary>
         /// Creates the initial RentalIncome record for a fund/period.
