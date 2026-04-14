@@ -114,6 +114,123 @@ namespace REIT_Project.Controllers
             return Ok(detail);
         }
 
+        // ── PATCH /api/properties/{id} ───────────────────────────────────────
+        /// <summary>
+        /// Partial update for a property. Only non-null fields in the body are applied.
+        /// Soft-delete is done by setting Status = "sold" or "under-review".
+        /// Blocks physical deletion when a TrustFund with transactional history exists.
+        /// </summary>
+        [HttpPatch("{id:int}")]
+        public async Task<IActionResult> PatchProperty(int id, [FromBody] PatchPropertyDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var property = await _context.Properties
+                .Include(p => p.TrustFund)
+                .FirstOrDefaultAsync(p => p.PropId == id);
+
+            if (property is null)
+                return NotFound($"Property with prop_id={id} not found.");
+
+            // ── Status validation ─────────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+            {
+                try
+                {
+                    var (statusValid, statusAllowed) = await _validation.IsValidAsync("status_prop", dto.Status);
+                    if (!statusValid)
+                        return BadRequest(new { error = "Invalid value", field = "status", allowed = statusAllowed });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return StatusCode(500, ex.Message);
+                }
+            }
+
+            // ── PropType validation ───────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.PropType))
+            {
+                try
+                {
+                    var (typeValid, typeAllowed) = await _validation.IsValidAsync("prop_type", dto.PropType);
+                    if (!typeValid)
+                        return BadRequest(new { error = "Invalid value", field = "prop_type", allowed = typeAllowed });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return StatusCode(500, ex.Message);
+                }
+            }
+
+            // ── Date coherence ────────────────────────────────────────────────
+            DateOnly effectiveDateAdded  = dto.DateAdded  ?? property.DateAdded;
+            DateOnly? effectiveDateRemoved = dto.DateRemoved ?? property.DateRemoved;
+            if (effectiveDateRemoved.HasValue && effectiveDateRemoved.Value <= effectiveDateAdded)
+                return BadRequest($"date_removed ({effectiveDateRemoved}) must be later than date_added ({effectiveDateAdded}).");
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // Capture old state for audit
+                    string oldSnapshot =
+                        $"PropName={property.PropName}, PropType={property.PropType}, " +
+                        $"Status={property.Status}, PurchasePrice={property.PurchasePrice:F2}, " +
+                        $"CurrentValue={property.CurrentValue?.ToString("F2") ?? "null"}";
+
+                    // Apply only provided fields
+                    if (!string.IsNullOrWhiteSpace(dto.PropName))      property.PropName      = dto.PropName.Trim();
+                    if (!string.IsNullOrWhiteSpace(dto.PropType))      property.PropType      = dto.PropType.ToLower();
+                    if (!string.IsNullOrWhiteSpace(dto.Address))       property.Address       = dto.Address;
+                    if (!string.IsNullOrWhiteSpace(dto.City))          property.City          = dto.City;
+                    if (dto.ProvinceState is not null)                 property.ProvinceState = string.IsNullOrWhiteSpace(dto.ProvinceState) ? null : dto.ProvinceState;
+                    if (!string.IsNullOrWhiteSpace(dto.Country))       property.Country       = dto.Country;
+                    if (dto.DateAdded.HasValue)                        property.DateAdded     = dto.DateAdded.Value;
+                    if (dto.DateRemoved.HasValue)                      property.DateRemoved   = dto.DateRemoved.Value;
+                    if (dto.PurchasePrice.HasValue)                    property.PurchasePrice = dto.PurchasePrice.Value;
+                    if (dto.CurrentValue.HasValue)                     property.CurrentValue  = dto.CurrentValue.Value;
+                    if (!string.IsNullOrWhiteSpace(dto.Status))        property.Status        = dto.Status.ToLower();
+                    if (dto.Notes is not null)                         property.Notes         = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes;
+
+                    _audit.LogAction(
+                        userId: dto.UserId,
+                        tableName: "Property",
+                        recordId: property.PropId,
+                        action: $"PATCH: Property '{property.PropName}' (prop_id={id}) updated.",
+                        oldInfo: oldSnapshot);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return Ok(new PropertyDto
+                    {
+                        PropId        = property.PropId,
+                        PropType      = property.PropType,
+                        PropName      = property.PropName,
+                        Address       = property.Address,
+                        City          = property.City,
+                        ProvinceState = property.ProvinceState,
+                        Country       = property.Country,
+                        DateAdded     = property.DateAdded,
+                        DateRemoved   = property.DateRemoved,
+                        PurchasePrice = property.PurchasePrice,
+                        CurrentValue  = property.CurrentValue,
+                        Status        = property.Status,
+                        Notes         = property.Notes
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, $"Property update failed: {ex.Message}");
+                }
+            });
+        }
+
         // ── POST /api/properties/onboard ─────────────────────────────────────
         [HttpPost("onboard")]
         public async Task<IActionResult> OnboardProperty([FromBody] OnboardPropertyDto dto)

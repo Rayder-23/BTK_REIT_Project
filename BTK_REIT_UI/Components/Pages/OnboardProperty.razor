@@ -1,0 +1,385 @@
+@page "/onboard-property"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>Onboard Property — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Onboard New Property</h1>
+        <p class="reit-page-subtitle">Registers a Property, Trust Fund, and seeds 100% REIT ownership in a single atomic transaction</p>
+    </div>
+</div>
+
+@* ── Success banner ── *@
+@if (successResult is not null)
+{
+    <div class="reit-form-alert reit-form-alert--success mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div>
+            <p class="reit-form-alert-title">Property onboarded successfully</p>
+            <p class="mb-0">
+                <strong>@successResult.PropName</strong> — Prop&nbsp;#@successResult.PropId,
+                Fund&nbsp;#@successResult.FundId,
+                Value&nbsp;<span class="mono">@FormatPkr(successResult.FundTotalValue)</span>
+            </p>
+        </div>
+        <div class="ms-auto d-flex gap-2">
+            <a href="properties/@successResult.PropId" class="reit-btn-link">View Property</a>
+            <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="ResetForm">Onboard Another</button>
+        </div>
+    </div>
+}
+
+@* ── Error banner ── *@
+@if (errorMessage is not null)
+{
+    <div class="reit-form-alert reit-form-alert--error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-form-alert-title">Onboarding failed</p>
+            <p class="mb-0">@errorMessage</p>
+        </div>
+        <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => errorMessage = null">Dismiss</button>
+    </div>
+}
+
+<EditForm Model="model" OnValidSubmit="HandleSubmit">
+    <DataAnnotationsValidator />
+
+    @* ── Property Details ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">Property Details</h2>
+                <p class="reit-form-section-sub">Core property identification and location</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Property Name <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.PropName" class="reit-form-input" placeholder="e.g. Bahria Heights Block C" />
+                <ValidationMessage For="() => model.PropName" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Property Type <span class="reit-required">*</span></label>
+                <InputSelect @bind-Value="model.PropType" class="reit-form-select">
+                    <option value="">— Select type —</option>
+                    <option value="residential">Residential</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="mixed-use">Mixed-Use</option>
+                </InputSelect>
+                <ValidationMessage For="() => model.PropType" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Acquisition Date <span class="reit-required">*</span></label>
+                <InputDate @bind-Value="model.DateAdded" class="reit-form-input" />
+                <ValidationMessage For="() => model.DateAdded" class="reit-form-validation" />
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--1">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Street Address <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.Address" class="reit-form-input" placeholder="House/Plot, Street, Sector" />
+                <ValidationMessage For="() => model.Address" class="reit-form-validation" />
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            <div class="reit-form-field">
+                <label class="reit-form-label">City <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.City" class="reit-form-input" placeholder="e.g. Rawalpindi" />
+                <ValidationMessage For="() => model.City" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Province / State</label>
+                <InputText @bind-Value="model.ProvinceState" class="reit-form-input" placeholder="e.g. Punjab" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Country <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.Country" class="reit-form-input" placeholder="e.g. Pakistan" />
+                <ValidationMessage For="() => model.Country" class="reit-form-validation" />
+            </div>
+        </div>
+    </div>
+
+    @* ── Financial Details ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">Financials</h2>
+                <p class="reit-form-section-sub">Purchase price and current valuation</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Purchase Price (PKR) <span class="reit-required">*</span></label>
+                <InputNumber @bind-Value="model.PurchasePrice" class="reit-form-input mono" placeholder="0.00" />
+                <ValidationMessage For="() => model.PurchasePrice" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Current Value (PKR)</label>
+                <InputNumber @bind-Value="model.CurrentValue" class="reit-form-input mono" placeholder="Leave blank to use purchase price" />
+                <p class="reit-form-hint">Defaults to Purchase Price when omitted</p>
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Fund Total Value (PKR)</label>
+                <InputNumber @bind-Value="model.FundTotalValue" class="reit-form-input mono" placeholder="Optional override" />
+                <p class="reit-form-hint">Defaults to Purchase Price when omitted</p>
+            </div>
+        </div>
+    </div>
+
+    @* ── Trust Fund Details ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">Trust Fund</h2>
+                <p class="reit-form-section-sub">Auto-created and seeded with 100% REIT ownership at submission</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--2">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Fund Short Title</label>
+                <InputText @bind-Value="model.FundTitle" class="reit-form-input" placeholder="e.g. BTK-R01" />
+                <p class="reit-form-hint">Short code shown in tables (100 chars)</p>
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Fund Full Title</label>
+                <InputText @bind-Value="model.FundTitleLong" class="reit-form-input" placeholder="e.g. Bahria Heights Block C Trust Fund" />
+                <p class="reit-form-hint">Defaults to "[Property Name] Trust Fund"</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--2">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Fund Start Date</label>
+                <InputDate @bind-Value="model.FundStartDate" class="reit-form-input" />
+                <p class="reit-form-hint">Defaults to Acquisition Date</p>
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Fund Notes</label>
+                <InputTextArea @bind-Value="model.FundNotes" class="reit-form-input reit-form-textarea" rows="2" placeholder="Optional notes" />
+            </div>
+        </div>
+    </div>
+
+    @* ── Property Notes ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-grid reit-form-grid--1">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Property Notes</label>
+                <InputTextArea @bind-Value="model.PropNotes" class="reit-form-input reit-form-textarea" rows="3" placeholder="Any additional remarks about the property" />
+            </div>
+        </div>
+    </div>
+
+    @* ── Submit ── *@
+    <div class="reit-form-actions">
+        <button type="button" class="reit-btn reit-btn--ghost" @onclick="ResetForm" disabled="@isSubmitting">
+            Reset
+        </button>
+        <button type="submit" class="reit-btn reit-btn--primary" disabled="@isSubmitting">
+            @if (isSubmitting)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <span>Onboarding&hellip;</span>
+            }
+            else
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                <span>Onboard Property</span>
+            }
+        </button>
+    </div>
+
+</EditForm>
+
+@code {
+    private OnboardFormModel model = new();
+    private bool isSubmitting;
+    private string? errorMessage;
+    private OnboardResult? successResult;
+
+    protected override void OnInitialized()
+    {
+        model.DateAdded = DateOnly.FromDateTime(DateTime.Today);
+        model.Country   = "Pakistan";
+    }
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting  = true;
+        errorMessage  = null;
+        successResult = null;
+
+        var dto = new OnboardPropertyDto
+        {
+            UserId        = AuthService.CurrentSession?.UserId ?? 0,
+            PropType      = model.PropType,
+            PropName      = model.PropName,
+            Address       = model.Address,
+            City          = model.City,
+            ProvinceState = string.IsNullOrWhiteSpace(model.ProvinceState) ? null : model.ProvinceState,
+            Country       = model.Country,
+            DateAdded     = model.DateAdded,
+            PurchasePrice = model.PurchasePrice,
+            CurrentValue  = model.CurrentValue,
+            FundTotalValue = model.FundTotalValue,
+            FundTitle     = string.IsNullOrWhiteSpace(model.FundTitle) ? null : model.FundTitle,
+            FundTitleLong = string.IsNullOrWhiteSpace(model.FundTitleLong) ? null : model.FundTitleLong,
+            FundStartDate = model.FundStartDate.HasValue
+                ? new DateTime(model.FundStartDate.Value.Year, model.FundStartDate.Value.Month,
+                                model.FundStartDate.Value.Day, 0, 0, 0, DateTimeKind.Utc)
+                : null,
+            FundNotes     = string.IsNullOrWhiteSpace(model.FundNotes) ? null : model.FundNotes,
+            PropNotes     = string.IsNullOrWhiteSpace(model.PropNotes) ? null : model.PropNotes,
+            Status        = "active"
+        };
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/properties/onboard", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OnboardApiResult>();
+                successResult = new OnboardResult
+                {
+                    PropId         = result!.propId,
+                    PropName       = dto.PropName,
+                    FundId         = result.fundId,
+                    FundTotalValue = result.fundTotalValue
+                };
+                model = new OnboardFormModel
+                {
+                    DateAdded = DateOnly.FromDateTime(DateTime.Today),
+                    Country   = "Pakistan"
+                };
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                errorMessage = $"HTTP {(int)response.StatusCode} — {body}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"API unreachable — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        model         = new OnboardFormModel { DateAdded = DateOnly.FromDateTime(DateTime.Today), Country = "Pakistan" };
+        errorMessage  = null;
+        successResult = null;
+    }
+
+    private static string FormatPkr(decimal v) => "PKR " + v.ToString("N0");
+
+    // ── Local form model with DataAnnotations ────────────────────────────────
+    private class OnboardFormModel
+    {
+        [Required(ErrorMessage = "Property name is required.")]
+        [MaxLength(100)]
+        public string PropName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Property type is required.")]
+        public string PropType { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Acquisition date is required.")]
+        public DateOnly? DateAdded { get; set; }
+
+        [Required(ErrorMessage = "Address is required.")]
+        [MaxLength(200)]
+        public string Address { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "City is required.")]
+        [MaxLength(60)]
+        public string City { get; set; } = string.Empty;
+
+        [MaxLength(60)]
+        public string? ProvinceState { get; set; }
+
+        [Required(ErrorMessage = "Country is required.")]
+        [MaxLength(60)]
+        public string Country { get; set; } = "Pakistan";
+
+        [Required(ErrorMessage = "Purchase price is required.")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Purchase price must be greater than 0.")]
+        public decimal PurchasePrice { get; set; }
+
+        public decimal? CurrentValue { get; set; }
+        public decimal? FundTotalValue { get; set; }
+
+        [MaxLength(100)]
+        public string? FundTitle { get; set; }
+        [MaxLength(500)]
+        public string? FundTitleLong { get; set; }
+
+        public DateOnly? FundStartDate { get; set; }
+
+        [MaxLength(500)]
+        public string? FundNotes { get; set; }
+        [MaxLength(500)]
+        public string? PropNotes { get; set; }
+    }
+
+    // ── Response shape from POST /api/properties/onboard ────────────────────
+    private record OnboardApiResult(int propId, string propName, int fundId, decimal fundTotalValue, int fundDtId);
+
+    private record OnboardResult
+    {
+        public int PropId { get; init; }
+        public string PropName { get; init; } = string.Empty;
+        public int FundId { get; init; }
+        public decimal FundTotalValue { get; init; }
+    }
+}

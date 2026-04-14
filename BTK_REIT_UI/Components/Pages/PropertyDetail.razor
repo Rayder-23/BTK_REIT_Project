@@ -1,0 +1,459 @@
+@page "/properties/{Id:int}"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>@(property?.PropName ?? "Property") — BTK REIT</PageTitle>
+
+@* ── Loading ── *@
+@if (property is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status"></div>
+            <p class="mb-0">Loading property&hellip;</p>
+        </div>
+    </div>
+}
+@* ── Load error ── *@
+else if (loadError is not null)
+{
+    <div class="reit-error"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+        <div><p class="reit-error-title">Could not load property</p><p class="mb-0">@loadError</p></div>
+    </div>
+}
+else if (property is not null)
+{
+    @* ── Page header ── *@
+    <div class="reit-page-header">
+        <div class="d-flex align-items-center gap-3">
+            <a href="properties" class="reit-back-link">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+            </a>
+            <div>
+                <h1 class="reit-page-title">@property.PropName</h1>
+                <p class="reit-page-subtitle">Prop #@property.PropId &nbsp;·&nbsp; @property.City@(property.ProvinceState is not null ? $", {property.ProvinceState}" : "") &nbsp;·&nbsp; <span class="text-capitalize">@property.PropType</span></p>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge-soft @GetStatusClass(property.Status)">@property.Status</span>
+            @if (!isEditMode)
+            {
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="EnterEdit">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+                    Edit
+                </button>
+                <button class="reit-btn reit-btn--danger reit-btn--sm" @onclick="() => showDeleteModal = true">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                    Soft Delete
+                </button>
+            }
+            else
+            {
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="CancelEdit">Cancel</button>
+                <button class="reit-btn reit-btn--primary reit-btn--sm" @onclick="SaveEdit" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Save Changes
+                </button>
+            }
+        </div>
+    </div>
+
+    @* ── Feedback banners ── *@
+    @if (saveSuccess is not null)
+    {
+        <div class="reit-form-alert reit-form-alert--success mb-4">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="mb-0">@saveSuccess</p>
+            <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => saveSuccess = null">×</button>
+        </div>
+    }
+    @if (saveError is not null)
+    {
+        <div class="reit-form-alert reit-form-alert--error mb-4">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+            <p class="mb-0">@saveError</p>
+            <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => saveError = null">×</button>
+        </div>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       VIEW MODE
+       ══════════════════════════════════════════════════════════ *@
+    @if (!isEditMode)
+    {
+        <div class="reit-detail-grid">
+
+            @* ── Financials card ── *@
+            <div class="reit-profile-card reit-profile-card--span2">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Financials
+                </div>
+                <div class="reit-profile-stats">
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Purchase Price</span>
+                        <span class="reit-profile-stat-value mono">@FormatPkr(property.PurchasePrice)</span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Current Value</span>
+                        <span class="reit-profile-stat-value mono @(property.CurrentValue.HasValue ? (property.CurrentValue >= property.PurchasePrice ? "text-gain" : "text-loss") : "")">
+                            @(property.CurrentValue.HasValue ? FormatPkr(property.CurrentValue.Value) : "—")
+                        </span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Acquisition Date</span>
+                        <span class="reit-profile-stat-value mono">@property.DateAdded.ToString("dd MMM yyyy")</span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Disposal Date</span>
+                        <span class="reit-profile-stat-value mono">@(property.DateRemoved.HasValue ? property.DateRemoved.Value.ToString("dd MMM yyyy") : "—")</span>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Location card ── *@
+            <div class="reit-profile-card">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+                    Location
+                </div>
+                <div class="reit-profile-rows">
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Address</span><span class="reit-profile-row-value">@property.Address</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">City</span><span class="reit-profile-row-value">@property.City</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Province</span><span class="reit-profile-row-value">@(property.ProvinceState ?? "—")</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Country</span><span class="reit-profile-row-value">@property.Country</span></div>
+                </div>
+            </div>
+
+            @* ── Classification card ── *@
+            <div class="reit-profile-card">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg>
+                    Classification
+                </div>
+                <div class="reit-profile-rows">
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Type</span><span class="reit-profile-row-value text-capitalize">@property.PropType</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Status</span><span class="reit-profile-row-value"><span class="badge-soft @GetStatusClass(property.Status)">@property.Status</span></span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Prop ID</span><span class="reit-profile-row-value mono">#@property.PropId</span></div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(property.Notes))
+                {
+                    <div class="reit-profile-notes">@property.Notes</div>
+                }
+            </div>
+
+        </div>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       EDIT MODE
+       ══════════════════════════════════════════════════════════ *@
+    else
+    {
+        <EditForm Model="editModel" OnValidSubmit="SaveEdit">
+            <DataAnnotationsValidator />
+
+            <div class="reit-form-section">
+                <div class="reit-form-section-header">
+                    <div class="reit-form-section-icon"><svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21"/></svg></div>
+                    <div><h2 class="reit-form-section-title">Edit Property</h2><p class="reit-form-section-sub">Only changed fields are sent to the API</p></div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Property Name <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.PropName" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.PropName" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Type <span class="reit-required">*</span></label>
+                        <InputSelect @bind-Value="editModel.PropType" class="reit-form-select">
+                            <option value="residential">Residential</option>
+                            <option value="commercial">Commercial</option>
+                            <option value="mixed-use">Mixed-Use</option>
+                        </InputSelect>
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Status <span class="reit-required">*</span></label>
+                        <InputSelect @bind-Value="editModel.Status" class="reit-form-select">
+                            @foreach (var s in propStatuses)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--1">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Address <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.Address" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.Address" class="reit-form-validation" />
+                    </div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">City <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.City" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.City" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Province / State</label>
+                        <InputText @bind-Value="editModel.ProvinceState" class="reit-form-input" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Country <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.Country" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.Country" class="reit-form-validation" />
+                    </div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Purchase Price (PKR) <span class="reit-required">*</span></label>
+                        <InputNumber @bind-Value="editModel.PurchasePrice" class="reit-form-input mono" />
+                        <ValidationMessage For="() => editModel.PurchasePrice" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Current Value (PKR)</label>
+                        <InputNumber @bind-Value="editModel.CurrentValue" class="reit-form-input mono" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Acquisition Date <span class="reit-required">*</span></label>
+                        <InputDate @bind-Value="editModel.DateAdded" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.DateAdded" class="reit-form-validation" />
+                    </div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--1">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Notes</label>
+                        <InputTextArea @bind-Value="editModel.Notes" class="reit-form-input reit-form-textarea" rows="3" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="reit-form-actions">
+                <button type="button" class="reit-btn reit-btn--ghost" @onclick="CancelEdit">Cancel</button>
+                <button type="submit" class="reit-btn reit-btn--primary" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Save Changes
+                </button>
+            </div>
+        </EditForm>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       SOFT DELETE CONFIRMATION MODAL
+       ══════════════════════════════════════════════════════════ *@
+    @if (showDeleteModal)
+    {
+        <div class="reit-modal-backdrop" @onclick="() => showDeleteModal = false">
+            <div class="reit-modal" @onclick:stopPropagation="true">
+                <div class="reit-modal-header">
+                    <div class="reit-modal-icon reit-modal-icon--danger">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="reit-modal-title">Soft-Delete Property</h3>
+                        <p class="reit-modal-sub">This sets the status to <strong>sold</strong>. The property and its financial history are preserved.</p>
+                    </div>
+                </div>
+                <div class="reit-modal-body">
+                    <p class="mb-1">You are about to mark <strong>@property.PropName</strong> (Prop #@property.PropId) as <span class="badge-soft badge-suspended">sold</span>.</p>
+                    <p class="text-muted-sm mb-0">This action is reversible — an admin can restore the status to <em>active</em> at any time.</p>
+                </div>
+                <div class="reit-modal-footer">
+                    <button class="reit-btn reit-btn--ghost" @onclick="() => showDeleteModal = false">Cancel</button>
+                    <button class="reit-btn reit-btn--danger" @onclick="SoftDelete" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Confirm Soft-Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private PropertyDto? property;
+    private string? loadError;
+    private string? saveError;
+    private string? saveSuccess;
+    private bool isEditMode;
+    private bool isSaving;
+    private bool showDeleteModal;
+
+    private List<string> propStatuses = new() { "active", "sold", "under-review" };
+
+    private EditPropertyModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        await LoadStatusOptionsAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            property = await Http.GetFromJsonAsync<PropertyDto>($"api/properties/{Id}");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            loadError = $"Property #{Id} not found.";
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+    }
+
+    private async Task LoadStatusOptionsAsync()
+    {
+        try
+        {
+            var configs = await Http.GetFromJsonAsync<List<ConfigurationDto>>("api/config");
+            var entry = configs?.FirstOrDefault(c =>
+                string.Equals(c.Key, "status_prop", StringComparison.OrdinalIgnoreCase));
+
+            if (entry is not null)
+            {
+                propStatuses = entry.Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim().ToLower())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+            }
+        }
+        catch { /* fall back to defaults */ }
+    }
+
+    private void EnterEdit()
+    {
+        if (property is null) return;
+        editModel = new EditPropertyModel
+        {
+            PropName      = property.PropName,
+            PropType      = property.PropType,
+            Status        = property.Status,
+            Address       = property.Address,
+            City          = property.City,
+            ProvinceState = property.ProvinceState,
+            Country       = property.Country,
+            PurchasePrice = property.PurchasePrice,
+            CurrentValue  = property.CurrentValue,
+            DateAdded     = property.DateAdded,
+            Notes         = property.Notes
+        };
+        isEditMode = true;
+        saveError  = null;
+        saveSuccess = null;
+    }
+
+    private void CancelEdit()
+    {
+        isEditMode = false;
+        saveError  = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        isSaving   = true;
+        saveError  = null;
+        saveSuccess = null;
+
+        var dto = new PatchPropertyDto
+        {
+            UserId        = AuthService.CurrentSession?.UserId ?? 0,
+            PropName      = editModel.PropName,
+            PropType      = editModel.PropType,
+            Status        = editModel.Status,
+            Address       = editModel.Address,
+            City          = editModel.City,
+            ProvinceState = editModel.ProvinceState,
+            Country       = editModel.Country,
+            PurchasePrice = editModel.PurchasePrice,
+            CurrentValue  = editModel.CurrentValue == 0 ? null : editModel.CurrentValue,
+            DateAdded     = editModel.DateAdded,
+            Notes         = editModel.Notes
+        };
+
+        try
+        {
+            var response = await Http.PatchAsJsonAsync($"api/properties/{Id}", dto);
+            if (response.IsSuccessStatusCode)
+            {
+                property    = await response.Content.ReadFromJsonAsync<PropertyDto>();
+                isEditMode  = false;
+                saveSuccess = "Property updated successfully.";
+            }
+            else
+            {
+                saveError = $"HTTP {(int)response.StatusCode} — {await response.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception ex) { saveError = ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    private async Task SoftDelete()
+    {
+        isSaving        = true;
+        showDeleteModal = false;
+        saveError       = null;
+        saveSuccess     = null;
+
+        var dto = new PatchPropertyDto
+        {
+            UserId = AuthService.CurrentSession?.UserId ?? 0,
+            Status = "sold"
+        };
+
+        try
+        {
+            var response = await Http.PatchAsJsonAsync($"api/properties/{Id}", dto);
+            if (response.IsSuccessStatusCode)
+            {
+                property    = await response.Content.ReadFromJsonAsync<PropertyDto>();
+                saveSuccess = $"Property marked as sold.";
+            }
+            else
+            {
+                saveError = $"HTTP {(int)response.StatusCode} — {await response.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception ex) { saveError = ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    private static string FormatPkr(decimal v) => "PKR " + v.ToString("N0");
+
+    private static string GetStatusClass(string status) => status.ToLower() switch
+    {
+        "active"       => "badge-active",
+        "sold"         => "badge-suspended",
+        "under-review" => "badge-pending",
+        _              => "badge-inactive"
+    };
+
+    private class EditPropertyModel
+    {
+        [Required] [MaxLength(100)] public string PropName { get; set; } = string.Empty;
+        [Required] public string PropType { get; set; } = string.Empty;
+        [Required] public string Status { get; set; } = string.Empty;
+        [Required] [MaxLength(200)] public string Address { get; set; } = string.Empty;
+        [Required] [MaxLength(60)] public string City { get; set; } = string.Empty;
+        [MaxLength(60)] public string? ProvinceState { get; set; }
+        [Required] [MaxLength(60)] public string Country { get; set; } = string.Empty;
+        [Required] [Range(0.01, double.MaxValue)] public decimal PurchasePrice { get; set; }
+        public decimal? CurrentValue { get; set; }
+        [Required] public DateOnly DateAdded { get; set; }
+        [MaxLength(500)] public string? Notes { get; set; }
+    }
+}

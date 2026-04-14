@@ -1,0 +1,560 @@
+@page "/add-shareholder"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>Add Shareholder — BTK REIT</PageTitle>
+
+@* ── Page header ── *@
+<div class="reit-page-header">
+    <div>
+        <h1 class="reit-page-title">Add Shareholder</h1>
+        <p class="reit-page-subtitle">Register an investor and link their bank account in one workflow</p>
+    </div>
+</div>
+
+@* ── Success banner ── *@
+@if (successResult is not null)
+{
+    <div class="reit-form-alert reit-form-alert--success mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div>
+            <p class="reit-form-alert-title">Shareholder registered successfully</p>
+            <p class="mb-0">
+                <strong>@successResult.FullName</strong> (@successResult.UserName) — SH&nbsp;#@successResult.ShId
+                @if (successResult.BankLinked)
+                {
+                    <span class="ms-2 badge-soft badge-active">Bank account linked</span>
+                }
+            </p>
+        </div>
+        <div class="ms-auto d-flex gap-2">
+            <a href="shareholders/@successResult.ShId" class="reit-btn-link">View Profile</a>
+            <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="ResetForm">Add Another</button>
+        </div>
+    </div>
+}
+
+@* ── Error banner ── *@
+@if (errorMessage is not null)
+{
+    <div class="reit-form-alert reit-form-alert--error mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div>
+            <p class="reit-form-alert-title">Registration failed</p>
+            <p class="mb-0">@errorMessage</p>
+        </div>
+        <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => errorMessage = null">Dismiss</button>
+    </div>
+}
+
+@* ── Validation requirement hint ── *@
+@if (model.ShType != "")
+{
+    <div class="reit-kyc-hint mb-4">
+        <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>
+        </svg>
+        <span>@KycHintText</span>
+    </div>
+}
+
+<EditForm Model="model" OnValidSubmit="HandleSubmit">
+    <DataAnnotationsValidator />
+
+    @* ── Identity ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">Shareholder Identity</h2>
+                <p class="reit-form-section-sub">Core registration and contact details</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Full Name <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.FullName" class="reit-form-input" placeholder="e.g. Muhammad Ali Khan" />
+                <ValidationMessage For="() => model.FullName" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Username <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.UserName" class="reit-form-input mono" placeholder="Unique login handle" />
+                <ValidationMessage For="() => model.UserName" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Investor Type <span class="reit-required">*</span></label>
+                <InputSelect @bind-Value="model.ShType" class="reit-form-select" @bind-Value:after="OnTypeChanged">
+                    <option value="">— Select type —</option>
+                    <option value="individual">Individual</option>
+                    <option value="company">Company</option>
+                    <option value="trust">Trust</option>
+                </InputSelect>
+                <ValidationMessage For="() => model.ShType" class="reit-form-validation" />
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--2">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Contact Number <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.ContactNo" class="reit-form-input mono" placeholder="e.g. 0300-1234567" />
+                <ValidationMessage For="() => model.ContactNo" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Email Address <span class="reit-required">*</span></label>
+                <InputText @bind-Value="model.ContactEmail" class="reit-form-input" placeholder="investor@example.com" />
+                <ValidationMessage For="() => model.ContactEmail" class="reit-form-validation" />
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--2">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Password</label>
+                <InputText @bind-Value="model.Password" type="password" class="reit-form-input" placeholder="Investor portal password" />
+                <p class="reit-form-hint">Used for the investor self-service portal</p>
+            </div>
+        </div>
+    </div>
+
+    @* ── KYC ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">KYC Documents</h2>
+                <p class="reit-form-section-sub">@KycSubtitle</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            @* ── CNIC ── *@
+            <div class="reit-form-field">
+                <label class="reit-form-label">
+                    CNIC
+                    @if (CnicRequired) { <span class="reit-required">*</span> }
+                    @if (CnicDisabled) { <span class="reit-field-tag">N/A</span> }
+                </label>
+                <InputText @bind-Value="model.Cnic"
+                           class="@CnicInputClass"
+                           placeholder="XXXXX-XXXXXXX-X"
+                           disabled="@CnicDisabled" />
+                @if (CnicRequired && string.IsNullOrWhiteSpace(model.Cnic) && formSubmitAttempted)
+                {
+                    <span class="reit-form-validation">CNIC is required.</span>
+                }
+            </div>
+
+            @* ── NTN ── *@
+            <div class="reit-form-field">
+                <label class="reit-form-label">
+                    NTN No.
+                    @if (NtnRequired) { <span class="reit-required">*</span> }
+                </label>
+                <InputText @bind-Value="model.NtnNo"
+                           class="reit-form-input mono"
+                           placeholder="National Tax Number" />
+                @if (NtnRequired && string.IsNullOrWhiteSpace(model.NtnNo) && formSubmitAttempted)
+                {
+                    <span class="reit-form-validation">NTN is required.</span>
+                }
+            </div>
+
+            @* ── Passport ── *@
+            <div class="reit-form-field">
+                <label class="reit-form-label">
+                    Passport No.
+                    @if (PassportRequired) { <span class="reit-required">*</span> }
+                </label>
+                <InputText @bind-Value="model.PassportNo"
+                           class="reit-form-input mono"
+                           placeholder="For overseas investors" />
+                @if (PassportRequired && string.IsNullOrWhiteSpace(model.PassportNo) && formSubmitAttempted)
+                {
+                    <span class="reit-form-validation">Passport number is required for overseas investors.</span>
+                }
+            </div>
+        </div>
+
+        @* ── Flags — only shown for Individual ── *@
+        @if (model.ShType == "individual" || model.ShType == "")
+        {
+            <div class="reit-form-flags">
+                <label class="reit-flag-switch">
+                    <InputCheckbox @bind-Value="model.IsFiller" class="reit-flag-input" @bind-Value:after="StateHasChanged" />
+                    <span class="reit-flag-toggle"></span>
+                    <div>
+                        <span class="reit-flag-label">Filler Shareholder</span>
+                        <span class="reit-flag-sub">
+                            Placeholder entry — excluded from dividends.
+                            @if (model.IsFiller) { <strong>Requires NTN</strong> }
+                        </span>
+                    </div>
+                </label>
+
+                <label class="reit-flag-switch">
+                    <InputCheckbox @bind-Value="model.IsOverseas" class="reit-flag-input" @bind-Value:after="StateHasChanged" />
+                    <span class="reit-flag-toggle"></span>
+                    <div>
+                        <span class="reit-flag-label">Overseas Investor</span>
+                        <span class="reit-flag-sub">
+                            Subject to different withholding tax rates.
+                            @if (model.IsOverseas) { <strong>Requires Passport No.</strong> }
+                        </span>
+                    </div>
+                </label>
+            </div>
+        }
+    </div>
+
+    @* ── Bank Account ── *@
+    <div class="reit-form-section">
+        <div class="reit-form-section-header">
+            <div class="reit-form-section-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="reit-form-section-title">Bank Account</h2>
+                <p class="reit-form-section-sub">Linked immediately after shareholder registration</p>
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--3">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Bank Name <span class="reit-required">*</span></label>
+                <InputText @bind-Value="bank.Bank" class="reit-form-input" placeholder="e.g. HBL, MCB, UBL" />
+                <ValidationMessage For="() => bank.Bank" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Account Title <span class="reit-required">*</span></label>
+                <InputText @bind-Value="bank.AccountTitle" class="reit-form-input" placeholder="Account holder's name" />
+                <ValidationMessage For="() => bank.AccountTitle" class="reit-form-validation" />
+            </div>
+
+            <div class="reit-form-field">
+                <label class="reit-form-label">Account Number <span class="reit-required">*</span></label>
+                <InputText @bind-Value="bank.AcNo" class="reit-form-input mono" placeholder="IBAN or account number" />
+                <ValidationMessage For="() => bank.AcNo" class="reit-form-validation" />
+            </div>
+        </div>
+
+        <div class="reit-form-grid reit-form-grid--1">
+            <div class="reit-form-field">
+                <label class="reit-form-label">Bank Account Notes</label>
+                <InputTextArea @bind-Value="bank.Notes" class="reit-form-input reit-form-textarea" rows="2" placeholder="Optional remarks (branch, SWIFT code, etc.)" />
+            </div>
+        </div>
+    </div>
+
+    @* ── Submit ── *@
+    <div class="reit-form-actions">
+        <button type="button" class="reit-btn reit-btn--ghost" @onclick="ResetForm" disabled="@isSubmitting">
+            Reset
+        </button>
+        <button type="submit" class="reit-btn reit-btn--primary" disabled="@isSubmitting">
+            @if (isSubmitting)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                @if (submitStep == SubmitStep.CreatingShareholder)
+                {
+                    <span>Registering shareholder&hellip;</span>
+                }
+                else
+                {
+                    <span>Linking bank account&hellip;</span>
+                }
+            }
+            else
+            {
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"/>
+                </svg>
+                <span>Register Shareholder</span>
+            }
+        </button>
+    </div>
+
+</EditForm>
+
+@code {
+    private ShareholderFormModel model = new();
+    private BankFormModel bank = new();
+    private bool isSubmitting;
+    private bool formSubmitAttempted;
+    private string? errorMessage;
+    private RegisterResult? successResult;
+    private SubmitStep submitStep;
+
+    private enum SubmitStep { Idle, CreatingShareholder, LinkingBank }
+
+    // ── KYC requirement logic ─────────────────────────────────────────────────
+    // Individual (default):              CNIC required
+    // Individual + Filler:               CNIC + NTN required
+    // Individual + Overseas:             CNIC + Passport required
+    // Individual + Filler + Overseas:    NTN + Passport required (CNIC not needed)
+    // Company / Trust:                   NTN required; CNIC disabled; no flags shown
+
+    private bool IsIndividual => model.ShType == "individual";
+    private bool IsCorpEntity => model.ShType == "company" || model.ShType == "trust";
+
+    private bool CnicRequired
+    {
+        get
+        {
+            if (!IsIndividual) return false;
+            // Filler+Overseas: passport+NTN take over; CNIC no longer required
+            if (model.IsFiller && model.IsOverseas) return false;
+            return true; // default individual, filler-only, overseas-only
+        }
+    }
+
+    private bool CnicDisabled => IsCorpEntity;
+    private string CnicInputClass => CnicDisabled ? "reit-form-input mono reit-form-input--disabled" : "reit-form-input mono";
+
+    private bool NtnRequired
+    {
+        get
+        {
+            if (IsCorpEntity) return true;
+            if (!IsIndividual) return false;
+            // Individual: required when Filler flag is on
+            return model.IsFiller;
+        }
+    }
+
+    private bool PassportRequired
+    {
+        get
+        {
+            if (!IsIndividual) return false;
+            return model.IsOverseas;
+        }
+    }
+
+    private string KycSubtitle => (model.ShType, model.IsFiller, model.IsOverseas) switch
+    {
+        ("individual", true,  true)  => "Filler + Overseas: NTN and Passport No. are both required",
+        ("individual", true,  false) => "Filler Individual: CNIC and NTN are required",
+        ("individual", false, true)  => "Overseas Individual: CNIC and Passport No. are required",
+        ("individual", false, false) => "Individual: CNIC is required",
+        ("company",    _,     _)     => "Company: NTN is required; CNIC not applicable",
+        ("trust",      _,     _)     => "Trust: NTN is required; CNIC not applicable",
+        _                            => "Select investor type to see required fields"
+    };
+
+    private string KycHintText => (model.ShType, model.IsFiller, model.IsOverseas) switch
+    {
+        ("individual", true,  true)  => "Filler + Overseas investor: NTN and Passport No. are mandatory",
+        ("individual", true,  false) => "Filler individual: CNIC and NTN are mandatory",
+        ("individual", false, true)  => "Overseas individual: CNIC and Passport No. are mandatory",
+        ("individual", false, false) => "Individual investor: CNIC is mandatory",
+        ("company",    _,     _)     => "Company: NTN is mandatory; use NTN field above",
+        ("trust",      _,     _)     => "Trust: NTN is mandatory; Filler/Overseas flags not applicable",
+        _                            => ""
+    };
+
+    // ── Clears stale KYC data when type changes ───────────────────────────────
+    private void OnTypeChanged()
+    {
+        if (IsCorpEntity)
+        {
+            model.Cnic       = null;
+            model.IsFiller   = false;
+            model.IsOverseas = false;
+        }
+    }
+
+    // ── Custom KYC validation ─────────────────────────────────────────────────
+    private bool KycValid()
+    {
+        if (CnicRequired     && string.IsNullOrWhiteSpace(model.Cnic))       return false;
+        if (NtnRequired      && string.IsNullOrWhiteSpace(model.NtnNo))      return false;
+        if (PassportRequired && string.IsNullOrWhiteSpace(model.PassportNo)) return false;
+        return true;
+    }
+
+    private async Task HandleSubmit()
+    {
+        formSubmitAttempted = true;
+
+        if (!KycValid())
+            return; // let the inline validation messages show
+
+        isSubmitting  = true;
+        errorMessage  = null;
+        successResult = null;
+
+        int adminId = AuthService.CurrentSession?.UserId ?? 0;
+
+        try
+        {
+            // ── Step 1: Register Shareholder ─────────────────────────────────
+            submitStep = SubmitStep.CreatingShareholder;
+
+            var shDto = new ShareholderCreateDto
+            {
+                UserId       = adminId,
+                UserName     = model.UserName,
+                FullName     = model.FullName,
+                ContactNo    = model.ContactNo,
+                ContactEmail = model.ContactEmail,
+                ShType       = model.ShType,
+                Password     = string.IsNullOrWhiteSpace(model.Password) ? null : model.Password,
+                Cnic         = CnicDisabled ? null : (string.IsNullOrWhiteSpace(model.Cnic) ? null : model.Cnic),
+                NtnNo        = string.IsNullOrWhiteSpace(model.NtnNo) ? null : model.NtnNo,
+                PassportNo   = string.IsNullOrWhiteSpace(model.PassportNo) ? null : model.PassportNo,
+                IsFiller     = IsIndividual && model.IsFiller,
+                IsOverseas   = IsIndividual && model.IsOverseas,
+                IsReit       = false
+            };
+
+            var shResponse = await Http.PostAsJsonAsync("api/shareholders", shDto);
+
+            if (!shResponse.IsSuccessStatusCode)
+            {
+                var body = await shResponse.Content.ReadAsStringAsync();
+                errorMessage = $"Shareholder registration failed — HTTP {(int)shResponse.StatusCode}: {body}";
+                return;
+            }
+
+            var created = await shResponse.Content.ReadFromJsonAsync<ShareholderCreatedResult>();
+            int newShId = created!.shId;
+
+            // ── Step 2: Link Bank Account ─────────────────────────────────────
+            submitStep = SubmitStep.LinkingBank;
+
+            var bankDto = new BankAccountCreateDto
+            {
+                ShId         = newShId,
+                UserId       = adminId,
+                Bank         = bank.Bank,
+                AccountTitle = bank.AccountTitle,
+                AcNo         = bank.AcNo,
+                Notes        = string.IsNullOrWhiteSpace(bank.Notes) ? null : bank.Notes,
+                Status       = "active"
+            };
+
+            var bankResponse = await Http.PostAsJsonAsync("api/shareholders/account", bankDto);
+
+            if (!bankResponse.IsSuccessStatusCode)
+            {
+                var body = await bankResponse.Content.ReadAsStringAsync();
+                errorMessage = $"SH #{newShId} registered, but bank account could not be linked — {body}";
+                successResult = new RegisterResult { ShId = newShId, UserName = model.UserName, FullName = model.FullName, BankLinked = false };
+                return;
+            }
+
+            successResult = new RegisterResult { ShId = newShId, UserName = model.UserName, FullName = model.FullName, BankLinked = true };
+            model = new ShareholderFormModel();
+            bank  = new BankFormModel();
+            formSubmitAttempted = false;
+        }
+        catch (HttpRequestException ex) { errorMessage = $"API unreachable — {ex.Message}"; }
+        catch (Exception ex)            { errorMessage = ex.Message; }
+        finally
+        {
+            isSubmitting = false;
+            submitStep   = SubmitStep.Idle;
+        }
+    }
+
+    private void ResetForm()
+    {
+        model               = new ShareholderFormModel();
+        bank                = new BankFormModel();
+        errorMessage        = null;
+        successResult       = null;
+        formSubmitAttempted = false;
+    }
+
+    // ── Local form models ─────────────────────────────────────────────────────
+
+    private class ShareholderFormModel
+    {
+        [Required(ErrorMessage = "Full name is required.")]
+        [MaxLength(120)]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Username is required.")]
+        [MaxLength(50)]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Investor type is required.")]
+        public string ShType { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Contact number is required.")]
+        [MaxLength(20)]
+        public string ContactNo { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email address is required.")]
+        [MaxLength(100)]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string ContactEmail { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string? Password { get; set; }
+
+        // KYC — validated via custom KycValid() rather than DataAnnotations
+        // so requirements can depend on ShType + flags
+        [MaxLength(20)]
+        public string? Cnic { get; set; }
+
+        [MaxLength(30)]
+        public string? NtnNo { get; set; }
+
+        [MaxLength(30)]
+        public string? PassportNo { get; set; }
+
+        public bool IsFiller   { get; set; }
+        public bool IsOverseas { get; set; }
+    }
+
+    private class BankFormModel
+    {
+        [Required(ErrorMessage = "Bank name is required.")]
+        [MaxLength(100)]
+        public string Bank { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Account title is required.")]
+        [MaxLength(120)]
+        public string AccountTitle { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Account number is required.")]
+        [MaxLength(30)]
+        public string AcNo { get; set; } = string.Empty;
+
+        [MaxLength(500)]
+        public string? Notes { get; set; }
+    }
+
+    private record ShareholderCreatedResult(int shId, string userName, string fullName);
+
+    private record RegisterResult
+    {
+        public int ShId { get; init; }
+        public string UserName { get; init; } = string.Empty;
+        public string FullName { get; init; } = string.Empty;
+        public bool BankLinked { get; init; }
+    }
+}

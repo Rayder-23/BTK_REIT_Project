@@ -244,6 +244,147 @@ namespace REIT_Project.Controllers
             });
         }
 
+        // ── PATCH /api/shareholders/{id} ────────────────────────────────────
+        /// <summary>
+        /// Partial update for a shareholder. Only non-null fields in the body are applied.
+        /// Soft-delete: set Status = "inactive" or "suspended".
+        /// Blocks full deletion when the shareholder holds an active fund stake (pct_owned > 0, end_date IS NULL).
+        /// </summary>
+        [HttpPatch("{id:int}")]
+        public async Task<IActionResult> PatchShareholder(int id, [FromBody] PatchShareholderDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var shareholder = await _context.Shareholders
+                .FirstOrDefaultAsync(s => s.ShId == id);
+
+            if (shareholder is null)
+                return NotFound($"Shareholder with sh_id={id} not found.");
+
+            // ── Status guard: cannot deactivate/suspend while holding active stake ──
+            if (!string.IsNullOrWhiteSpace(dto.Status) &&
+                !string.Equals(dto.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                bool hasActiveFundStake = await _context.FundDetails
+                    .AnyAsync(fd => fd.ShId == id && fd.EndDate == null && fd.PctOwned > 0);
+
+                if (hasActiveFundStake)
+                    return Conflict(
+                        $"Cannot change status to '{dto.Status}': shareholder sh_id={id} currently holds " +
+                        "an active stake in one or more funds. Transfer or retire ownership first.");
+            }
+
+            // ── Status validation ─────────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+            {
+                try
+                {
+                    var (statusValid, statusAllowed) = await _validation.IsValidAsync("status_sh", dto.Status);
+                    if (!statusValid)
+                        return BadRequest(new { error = "Invalid value", field = "status", allowed = statusAllowed });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return StatusCode(500, ex.Message);
+                }
+            }
+
+            // ── ShType validation ─────────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.ShType))
+            {
+                try
+                {
+                    var (typeValid, typeAllowed) = await _validation.IsValidAsync("sh_type", dto.ShType);
+                    if (!typeValid)
+                        return BadRequest(new { error = "Invalid value", field = "sh_type", allowed = typeAllowed });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return StatusCode(500, ex.Message);
+                }
+            }
+
+            // ── UserName uniqueness ───────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.UserName) &&
+                !string.Equals(dto.UserName, shareholder.UserName, StringComparison.OrdinalIgnoreCase))
+            {
+                bool taken = await _context.Shareholders
+                    .AnyAsync(s => s.UserName == dto.UserName && s.ShId != id);
+                if (taken)
+                    return Conflict($"Username '{dto.UserName}' is already taken.");
+            }
+
+            // ── CNIC uniqueness ───────────────────────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto.Cnic) &&
+                !string.Equals(dto.Cnic, shareholder.Cnic, StringComparison.OrdinalIgnoreCase))
+            {
+                bool cnicTaken = await _context.Shareholders
+                    .AnyAsync(s => s.Cnic == dto.Cnic && s.ShId != id);
+                if (cnicTaken)
+                    return Conflict($"CNIC '{dto.Cnic}' is already registered.");
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    string oldSnapshot =
+                        $"FullName={shareholder.FullName}, UserName={shareholder.UserName}, " +
+                        $"Status={shareholder.Status}, ShType={shareholder.ShType}, " +
+                        $"CNIC={shareholder.Cnic ?? "null"}, NTN={shareholder.NtnNo ?? "null"}";
+
+                    if (!string.IsNullOrWhiteSpace(dto.FullName))    shareholder.FullName     = dto.FullName.Trim();
+                    if (!string.IsNullOrWhiteSpace(dto.UserName))    shareholder.UserName     = dto.UserName;
+                    if (!string.IsNullOrWhiteSpace(dto.ShType))      shareholder.ShType       = dto.ShType.ToLower();
+                    if (!string.IsNullOrWhiteSpace(dto.ContactNo))   shareholder.ContactNo    = dto.ContactNo;
+                    if (!string.IsNullOrWhiteSpace(dto.ContactEmail)) shareholder.ContactEmail = dto.ContactEmail;
+                    if (dto.Cnic is not null)                        shareholder.Cnic         = string.IsNullOrWhiteSpace(dto.Cnic) ? null : dto.Cnic;
+                    if (dto.NtnNo is not null)                       shareholder.NtnNo        = string.IsNullOrWhiteSpace(dto.NtnNo) ? null : dto.NtnNo;
+                    if (dto.PassportNo is not null)                  shareholder.PassportNo   = string.IsNullOrWhiteSpace(dto.PassportNo) ? null : dto.PassportNo;
+                    if (dto.IsFiller.HasValue)                       shareholder.IsFiller     = dto.IsFiller.Value;
+                    if (dto.IsOverseas.HasValue)                     shareholder.IsOverseas   = dto.IsOverseas.Value;
+                    if (!string.IsNullOrWhiteSpace(dto.Status))      shareholder.Status       = dto.Status.ToLower();
+
+                    _audit.LogAction(
+                        userId: dto.UserId,
+                        tableName: "Shareholder",
+                        recordId: shareholder.ShId,
+                        action: $"PATCH: Shareholder '{shareholder.UserName}' (sh_id={id}) updated.",
+                        oldInfo: oldSnapshot);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return Ok(new ShareholderDto
+                    {
+                        ShId         = shareholder.ShId,
+                        ShType       = shareholder.ShType,
+                        UserName     = shareholder.UserName,
+                        FullName     = shareholder.FullName,
+                        Cnic         = shareholder.Cnic,
+                        NtnNo        = shareholder.NtnNo,
+                        PassportNo   = shareholder.PassportNo,
+                        ContactNo    = shareholder.ContactNo,
+                        ContactEmail = shareholder.ContactEmail,
+                        IsFiller     = shareholder.IsFiller,
+                        IsOverseas   = shareholder.IsOverseas,
+                        IsReit       = shareholder.IsReit,
+                        CreationDate = shareholder.CreationDate,
+                        Status       = shareholder.Status
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, $"Shareholder update failed: {ex.Message}");
+                }
+            });
+        }
+
         // ── PATCH /api/shareholders/{id}/status ──────────────────────────────
         [HttpPatch("{id:int}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateShareholderStatusDto dto)

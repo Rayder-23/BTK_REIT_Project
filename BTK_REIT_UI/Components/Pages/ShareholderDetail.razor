@@ -1,0 +1,504 @@
+@page "/shareholders/{Id:int}"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject BTK_REIT_UI.Services.AuthService AuthService
+@using BTK_REIT_Shared.DTOs
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>@(shareholder?.FullName ?? "Shareholder") — BTK REIT</PageTitle>
+
+@* ── Loading ── *@
+@if (shareholder is null && loadError is null)
+{
+    <div class="reit-card">
+        <div class="reit-loading">
+            <div class="spinner-border spinner-border-sm text-secondary mb-2" role="status"></div>
+            <p class="mb-0">Loading shareholder&hellip;</p>
+        </div>
+    </div>
+}
+@* ── Load error ── *@
+else if (loadError is not null)
+{
+    <div class="reit-error"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+        <div><p class="reit-error-title">Could not load shareholder</p><p class="mb-0">@loadError</p></div>
+    </div>
+}
+else if (shareholder is not null)
+{
+    @* ── Page header ── *@
+    <div class="reit-page-header">
+        <div class="d-flex align-items-center gap-3">
+            <a href="shareholders" class="reit-back-link">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+            </a>
+            <div>
+                <h1 class="reit-page-title">@shareholder.FullName</h1>
+                <p class="reit-page-subtitle">SH #@shareholder.ShId &nbsp;·&nbsp; @shareholder.UserName &nbsp;·&nbsp; <span class="text-capitalize">@shareholder.ShType</span></p>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge-soft @GetShStatusClass(shareholder.Status)">@shareholder.Status</span>
+            @if (!isEditMode)
+            {
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="EnterEdit">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/></svg>
+                    Edit
+                </button>
+                @if (shareholder.Status != "inactive")
+                {
+                    <button class="reit-btn reit-btn--danger reit-btn--sm" @onclick="() => showDeleteModal = true">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="reit-btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25V9m-3 0h12M5.25 9l.75 10.5A2.25 2.25 0 008.25 21.75h7.5A2.25 2.25 0 0018 19.5L18.75 9"/></svg>
+                        Deactivate
+                    </button>
+                }
+            }
+            else
+            {
+                <button class="reit-btn reit-btn--ghost reit-btn--sm" @onclick="CancelEdit">Cancel</button>
+                <button class="reit-btn reit-btn--primary reit-btn--sm" @onclick="SaveEdit" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Save Changes
+                </button>
+            }
+        </div>
+    </div>
+
+    @* ── Feedback banners ── *@
+    @if (saveSuccess is not null)
+    {
+        <div class="reit-form-alert reit-form-alert--success mb-4">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="mb-0">@saveSuccess</p>
+            <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => saveSuccess = null">×</button>
+        </div>
+    }
+    @if (saveError is not null)
+    {
+        <div class="reit-form-alert reit-form-alert--error mb-4">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+            <p class="mb-0">@saveError</p>
+            <button class="ms-auto reit-btn reit-btn--ghost reit-btn--sm" @onclick="() => saveError = null">×</button>
+        </div>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       VIEW MODE
+       ══════════════════════════════════════════════════════════ *@
+    @if (!isEditMode)
+    {
+        <div class="reit-detail-grid">
+
+            @* ── Identity card ── *@
+            <div class="reit-profile-card reit-profile-card--span2">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+                    Identity
+                </div>
+                <div class="reit-profile-stats">
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Full Name</span>
+                        <span class="reit-profile-stat-value">@shareholder.FullName</span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Username</span>
+                        <span class="reit-profile-stat-value mono">@shareholder.UserName</span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Type</span>
+                        <span class="reit-profile-stat-value text-capitalize">@shareholder.ShType</span>
+                    </div>
+                    <div class="reit-profile-stat">
+                        <span class="reit-profile-stat-label">Registered</span>
+                        <span class="reit-profile-stat-value mono">@shareholder.CreationDate.ToString("dd MMM yyyy")</span>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Contact card ── *@
+            <div class="reit-profile-card">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
+                    Contact
+                </div>
+                <div class="reit-profile-rows">
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Phone</span><span class="reit-profile-row-value mono">@shareholder.ContactNo</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Email</span><span class="reit-profile-row-value">@shareholder.ContactEmail</span></div>
+                </div>
+            </div>
+
+            @* ── KYC card ── *@
+            <div class="reit-profile-card">
+                <div class="reit-profile-card-header">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>
+                    KYC Documents
+                </div>
+                <div class="reit-profile-rows">
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">CNIC</span><span class="reit-profile-row-value mono">@(shareholder.Cnic ?? "—")</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">NTN</span><span class="reit-profile-row-value mono">@(shareholder.NtnNo ?? "—")</span></div>
+                    <div class="reit-profile-row"><span class="reit-profile-row-label">Passport</span><span class="reit-profile-row-value mono">@(shareholder.PassportNo ?? "—")</span></div>
+                </div>
+                <div class="reit-profile-flags mt-3">
+                    <span class="reit-profile-flag @(shareholder.IsFiller ? "reit-profile-flag--on" : "")">Filler</span>
+                    <span class="reit-profile-flag @(shareholder.IsOverseas ? "reit-profile-flag--on" : "")">Overseas</span>
+                    <span class="reit-profile-flag @(shareholder.IsReit ? "reit-profile-flag--on" : "")">REIT Entity</span>
+                </div>
+            </div>
+
+            @* ── Portfolio card ── *@
+            @if (portfolio is not null && portfolio.Count > 0)
+            {
+                <div class="reit-profile-card reit-profile-card--span3">
+                    <div class="reit-profile-card-header">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25"/></svg>
+                        Active Fund Stakes
+                    </div>
+                    <div class="reit-table-wrap">
+                        <table class="reit-table">
+                            <thead><tr><th>Fund</th><th>Fund ID</th><th class="text-end">Ownership %</th><th class="text-end">Share Value</th><th>Acquired</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in portfolio)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@p.FundTitle</td>
+                                        <td class="mono text-muted-sm">#@p.FundId</td>
+                                        <td class="text-end mono">@p.PctOwned.ToString("F2")%</td>
+                                        <td class="text-end mono">@FormatPkr(p.ShareValue)</td>
+                                        <td class="mono text-muted-sm">@p.AcquiredDate.ToString("dd MMM yyyy")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="reit-table-footer">
+                        Total portfolio value: <strong class="mono">@FormatPkr(portfolio.Sum(p => p.ShareValue))</strong>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       EDIT MODE
+       ══════════════════════════════════════════════════════════ *@
+    else
+    {
+        <EditForm Model="editModel" OnValidSubmit="SaveEdit">
+            <DataAnnotationsValidator />
+
+            @* ── Identity section ── *@
+            <div class="reit-form-section">
+                <div class="reit-form-section-header">
+                    <div class="reit-form-section-icon"><svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0"/></svg></div>
+                    <div><h2 class="reit-form-section-title">Edit Shareholder</h2><p class="reit-form-section-sub">Only changed fields are sent to the API</p></div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Full Name <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.FullName" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.FullName" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Username <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.UserName" class="reit-form-input mono" />
+                        <ValidationMessage For="() => editModel.UserName" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Status <span class="reit-required">*</span></label>
+                        <InputSelect @bind-Value="editModel.Status" class="reit-form-select">
+                            @foreach (var s in shStatuses)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Type</label>
+                        <InputSelect @bind-Value="editModel.ShType" class="reit-form-select">
+                            <option value="individual">Individual</option>
+                            <option value="company">Company</option>
+                            <option value="trust">Trust</option>
+                        </InputSelect>
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Contact Number <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.ContactNo" class="reit-form-input mono" />
+                        <ValidationMessage For="() => editModel.ContactNo" class="reit-form-validation" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Email <span class="reit-required">*</span></label>
+                        <InputText @bind-Value="editModel.ContactEmail" class="reit-form-input" />
+                        <ValidationMessage For="() => editModel.ContactEmail" class="reit-form-validation" />
+                    </div>
+                </div>
+            </div>
+
+            @* ── KYC section ── *@
+            <div class="reit-form-section">
+                <div class="reit-form-section-header">
+                    <div class="reit-form-section-icon"><svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15"/></svg></div>
+                    <div><h2 class="reit-form-section-title">KYC Documents</h2></div>
+                </div>
+
+                <div class="reit-form-grid reit-form-grid--3">
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">CNIC</label>
+                        <InputText @bind-Value="editModel.Cnic" class="reit-form-input mono" placeholder="XXXXX-XXXXXXX-X" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">NTN No.</label>
+                        <InputText @bind-Value="editModel.NtnNo" class="reit-form-input mono" />
+                    </div>
+                    <div class="reit-form-field">
+                        <label class="reit-form-label">Passport No.</label>
+                        <InputText @bind-Value="editModel.PassportNo" class="reit-form-input mono" />
+                    </div>
+                </div>
+
+                <div class="reit-form-flags">
+                    <label class="reit-flag-switch">
+                        <InputCheckbox @bind-Value="editModel.IsFiller" class="reit-flag-input" />
+                        <span class="reit-flag-toggle"></span>
+                        <div><span class="reit-flag-label">Filler Shareholder</span><span class="reit-flag-sub">Excluded from dividend calculations</span></div>
+                    </label>
+                    <label class="reit-flag-switch">
+                        <InputCheckbox @bind-Value="editModel.IsOverseas" class="reit-flag-input" />
+                        <span class="reit-flag-toggle"></span>
+                        <div><span class="reit-flag-label">Overseas Investor</span><span class="reit-flag-sub">Subject to different withholding tax rates</span></div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="reit-form-actions">
+                <button type="button" class="reit-btn reit-btn--ghost" @onclick="CancelEdit">Cancel</button>
+                <button type="submit" class="reit-btn reit-btn--primary" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Save Changes
+                </button>
+            </div>
+        </EditForm>
+    }
+
+    @* ══════════════════════════════════════════════════════════
+       DEACTIVATE CONFIRMATION MODAL
+       ══════════════════════════════════════════════════════════ *@
+    @if (showDeleteModal)
+    {
+        <div class="reit-modal-backdrop" @onclick="() => showDeleteModal = false">
+            <div class="reit-modal" @onclick:stopPropagation="true">
+                <div class="reit-modal-header">
+                    <div class="reit-modal-icon reit-modal-icon--danger">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="reit-modal-title">Deactivate Shareholder</h3>
+                        <p class="reit-modal-sub">Sets status to <strong>inactive</strong>. Blocked if the shareholder holds an active fund stake.</p>
+                    </div>
+                </div>
+                <div class="reit-modal-body">
+                    <p class="mb-1">You are about to deactivate <strong>@shareholder.FullName</strong> (@shareholder.UserName — SH #@shareholder.ShId).</p>
+                    <p class="text-muted-sm mb-0">The record and all financial history are preserved. This is reversible.</p>
+                </div>
+                <div class="reit-modal-footer">
+                    <button class="reit-btn reit-btn--ghost" @onclick="() => showDeleteModal = false">Cancel</button>
+                    <button class="reit-btn reit-btn--danger" @onclick="SoftDelete" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> } Confirm Deactivation
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ShareholderDto? shareholder;
+    private List<ShareholderPortfolioItemDto>? portfolio;
+    private string? loadError;
+    private string? saveError;
+    private string? saveSuccess;
+    private bool isEditMode;
+    private bool isSaving;
+    private bool showDeleteModal;
+
+    private List<string> shStatuses = new() { "active", "suspended", "inactive" };
+
+    private EditShareholderModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadAsync(), LoadPortfolioAsync(), LoadStatusOptionsAsync());
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            shareholder = await Http.GetFromJsonAsync<ShareholderDto>($"api/shareholders/{Id}");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            loadError = $"Shareholder #{Id} not found.";
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+    }
+
+    private async Task LoadPortfolioAsync()
+    {
+        try
+        {
+            portfolio = await Http.GetFromJsonAsync<List<ShareholderPortfolioItemDto>>($"api/shareholders/{Id}/portfolio");
+        }
+        catch { portfolio = new(); }
+    }
+
+    private async Task LoadStatusOptionsAsync()
+    {
+        try
+        {
+            var configs = await Http.GetFromJsonAsync<List<ConfigurationDto>>("api/config");
+            var entry = configs?.FirstOrDefault(c =>
+                string.Equals(c.Key, "status_sh", StringComparison.OrdinalIgnoreCase));
+
+            if (entry is not null)
+            {
+                shStatuses = entry.Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim().ToLower())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+            }
+        }
+        catch { /* fall back to defaults */ }
+    }
+
+    private void EnterEdit()
+    {
+        if (shareholder is null) return;
+        editModel = new EditShareholderModel
+        {
+            FullName     = shareholder.FullName,
+            UserName     = shareholder.UserName,
+            ShType       = shareholder.ShType,
+            ContactNo    = shareholder.ContactNo,
+            ContactEmail = shareholder.ContactEmail,
+            Status       = shareholder.Status,
+            Cnic         = shareholder.Cnic,
+            NtnNo        = shareholder.NtnNo,
+            PassportNo   = shareholder.PassportNo,
+            IsFiller     = shareholder.IsFiller,
+            IsOverseas   = shareholder.IsOverseas
+        };
+        isEditMode  = true;
+        saveError   = null;
+        saveSuccess = null;
+    }
+
+    private void CancelEdit()
+    {
+        isEditMode = false;
+        saveError  = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        isSaving    = true;
+        saveError   = null;
+        saveSuccess = null;
+
+        var dto = new PatchShareholderDto
+        {
+            UserId       = AuthService.CurrentSession?.UserId ?? 0,
+            FullName     = editModel.FullName,
+            UserName     = editModel.UserName,
+            ShType       = editModel.ShType,
+            ContactNo    = editModel.ContactNo,
+            ContactEmail = editModel.ContactEmail,
+            Status       = editModel.Status,
+            Cnic         = editModel.Cnic,
+            NtnNo        = editModel.NtnNo,
+            PassportNo   = editModel.PassportNo,
+            IsFiller     = editModel.IsFiller,
+            IsOverseas   = editModel.IsOverseas
+        };
+
+        try
+        {
+            var response = await Http.PatchAsJsonAsync($"api/shareholders/{Id}", dto);
+            if (response.IsSuccessStatusCode)
+            {
+                shareholder = await response.Content.ReadFromJsonAsync<ShareholderDto>();
+                isEditMode  = false;
+                saveSuccess = "Shareholder updated successfully.";
+            }
+            else
+            {
+                saveError = $"HTTP {(int)response.StatusCode} — {await response.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception ex) { saveError = ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    private async Task SoftDelete()
+    {
+        isSaving        = true;
+        showDeleteModal = false;
+        saveError       = null;
+        saveSuccess     = null;
+
+        var dto = new PatchShareholderDto
+        {
+            UserId = AuthService.CurrentSession?.UserId ?? 0,
+            Status = "inactive"
+        };
+
+        try
+        {
+            var response = await Http.PatchAsJsonAsync($"api/shareholders/{Id}", dto);
+            if (response.IsSuccessStatusCode)
+            {
+                shareholder = await response.Content.ReadFromJsonAsync<ShareholderDto>();
+                saveSuccess = "Shareholder deactivated.";
+            }
+            else
+            {
+                saveError = $"HTTP {(int)response.StatusCode} — {await response.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception ex) { saveError = ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    private static string FormatPkr(decimal v) => "PKR " + v.ToString("N0");
+
+    private static string GetShStatusClass(string status) => status.ToLower() switch
+    {
+        "active"    => "badge-active",
+        "suspended" => "badge-suspended",
+        "inactive"  => "badge-inactive",
+        _           => "badge-inactive"
+    };
+
+    private class EditShareholderModel
+    {
+        [Required] [MaxLength(120)] public string FullName { get; set; } = string.Empty;
+        [Required] [MaxLength(50)] public string UserName { get; set; } = string.Empty;
+        [Required] public string ShType { get; set; } = "individual";
+        [Required] [MaxLength(20)] public string ContactNo { get; set; } = string.Empty;
+        [Required] [MaxLength(100)] [EmailAddress] public string ContactEmail { get; set; } = string.Empty;
+        [Required] public string Status { get; set; } = "active";
+        [MaxLength(20)] public string? Cnic { get; set; }
+        [MaxLength(30)] public string? NtnNo { get; set; }
+        [MaxLength(30)] public string? PassportNo { get; set; }
+        public bool IsFiller { get; set; }
+        public bool IsOverseas { get; set; }
+    }
+}
